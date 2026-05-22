@@ -41,3 +41,43 @@ func DefaultSettings() Settings {
 		PlanModeDefault:       boolPtr(false),
 	}
 }
+
+// Merge 用 child 的非零字段覆盖 parent 后返回新值。
+// 字符串：空串视为未设置；指针：nil 视为未设置。
+func Merge(parent, child Settings) Settings {
+	out := parent
+	if child.OpenAIAPIKey != "" {
+		out.OpenAIAPIKey = child.OpenAIAPIKey
+	}
+	if child.OpenAIBaseURL != "" {
+		out.OpenAIBaseURL = child.OpenAIBaseURL
+	}
+	if child.OpenAIModel != "" {
+		out.OpenAIModel = child.OpenAIModel
+	}
+	if child.SkillsDir != "" {
+		out.SkillsDir = child.SkillsDir
+	}
+	if child.NovaDir != "" {
+		out.NovaDir = child.NovaDir
+	}
+	if child.AutoSaveEnabled != nil {
+		out.AutoSaveEnabled = child.AutoSaveEnabled
+	}
+	if child.AutoSaveIntervalMs != nil {
+		out.AutoSaveIntervalMs = child.AutoSaveIntervalMs
+	}
+	if child.ChapterFilenameFormat != "" {
+		out.ChapterFilenameFormat = child.ChapterFilenameFormat
+	}
+	if child.MaxIteration != nil {
+		out.MaxIteration = child.MaxIteration
+	}
+	if child.ModelMaxRetries != nil {
+		out.ModelMaxRetries = child.ModelMaxRetries
+	}
+	if child.PlanModeDefault != nil {
+		out.PlanModeDefault = child.PlanModeDefault
+	}
+	return out
+}
