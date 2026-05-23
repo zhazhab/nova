@@ -8,6 +8,7 @@ import { WorkspaceSelector } from '@/components/Header/WorkspaceSelector'
 import { GitPanel } from '@/components/Git/GitPanel'
 import { HomeView } from '@/components/Home/HomeView'
 import { SettingsView } from '@/features/settings/SettingsView'
+import { fetchSettings } from '@/features/settings/api'
 import { WorkspaceLayout } from '@/components/layout/workspace-layout'
 import { CommandPalette } from '@/components/common/command-palette'
 import { TooltipIconButton } from '@/components/common/tooltip-icon-button'
@@ -33,6 +34,7 @@ const PROJECT_VISIBLE_KEY = 'nova.layout.projectVisible'
 const TABS_STORAGE_PREFIX = 'nova.layout.tabs:'
 const ACTIVE_TAB_STORAGE_PREFIX = 'nova.layout.activeTab:'
 const APP_VERSION = __APP_VERSION__
+const MAX_OPEN_TABS_FALLBACK = 5
 
 /** 编辑区 Tab：承载文件或 Home（书籍管理）等页面 */
 type Tab =
@@ -45,6 +47,35 @@ function tabKey(tab: Tab): string {
   if (tab.kind === 'home') return 'home'
   if (tab.kind === 'settings') return 'settings'
   return `file:${tab.path}`
+}
+
+/** 在 tabs 中挑选最久未激活、且不等于 protectedKey 的 tab key（LRU 淘汰目标）。 */
+function pickLRUVictim(tabs: Tab[], protectedKey: string | null, activations: Map<string, number>): string | null {
+  let victim: string | null = null
+  let lowest = Infinity
+  for (const t of tabs) {
+    const k = tabKey(t)
+    if (k === protectedKey) continue
+    const score = activations.get(k) ?? 0
+    if (score < lowest) {
+      lowest = score
+      victim = k
+    }
+  }
+  return victim
+}
+
+/** 按 max 限制裁剪 tab 列表，循环淘汰最久未激活的 tab；副作用：从 activations 删除被淘汰项。 */
+function enforceTabLimit(tabs: Tab[], protectedKey: string | null, max: number, activations: Map<string, number>): Tab[] {
+  if (max < 1) return tabs
+  let current = tabs
+  while (current.length > max) {
+    const victim = pickLRUVictim(current, protectedKey, activations)
+    if (!victim) break
+    current = current.filter((t) => tabKey(t) !== victim)
+    activations.delete(victim)
+  }
+  return current
 }
 
 /** Tab 显示标题 */
@@ -96,7 +127,20 @@ function App() {
   const [gitRefreshSignal, setGitRefreshSignal] = useState(0)
   const [openTabs, setOpenTabs] = useState<Tab[]>([])
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null)
+  const [maxOpenTabs, setMaxOpenTabs] = useState<number>(MAX_OPEN_TABS_FALLBACK)
   const chatBootstrappedRef = useRef(false)
+  // 记录每个 tab 最后一次激活的时间戳（递增计数器），用于 LRU 淘汰
+  const tabActivationsRef = useRef<Map<string, number>>(new Map())
+  const tabActivationCounterRef = useRef(0)
+  /** 标记某个 tab 为最近激活，用于 LRU 评分。 */
+  const touchTab = useCallback((key: string) => {
+    tabActivationCounterRef.current += 1
+    tabActivationsRef.current.set(key, tabActivationCounterRef.current)
+  }, [])
+  /** 在 setOpenTabs 链路里复用：插入 tab 后按 maxOpenTabs 裁剪。protectedKey 是即将激活的 tab，保证不被淘汰。 */
+  const limitTabs = useCallback((tabs: Tab[], protectedKey: string | null): Tab[] => {
+    return enforceTabLimit(tabs, protectedKey, maxOpenTabs, tabActivationsRef.current)
+  }, [maxOpenTabs])
   const rightPanel = useWorkspaceStore((state) => state.rightPanel)
   const bottomPanel = useWorkspaceStore((state) => state.bottomPanel)
   const commandOpen = useWorkspaceStore((state) => state.commandOpen)
@@ -151,19 +195,58 @@ function App() {
     void Promise.all([loadSessions(), loadHistory()]).then(() => resumeActiveChat())
   }, [loadHistory, loadSessions, resumeActiveChat])
 
+  // 拉取分层配置中的 max_open_tabs（用户/工作区切换时也需重新拉取，因为工作区可能覆盖该值）
+  useEffect(() => {
+    let cancelled = false
+    const reload = () => {
+      fetchSettings()
+        .then((data) => {
+          if (cancelled) return
+          const v = data?.effective?.max_open_tabs
+          if (typeof v === 'number' && v >= 1) setMaxOpenTabs(Math.floor(v))
+        })
+        .catch((e) => console.warn('加载 max_open_tabs 失败', e))
+    }
+    reload()
+    const onUpdated = () => reload()
+    window.addEventListener('nova:settings-updated', onUpdated)
+    return () => {
+      cancelled = true
+      window.removeEventListener('nova:settings-updated', onUpdated)
+    }
+  }, [workspace])
+
+  // 激活的 tab 变化时记录 LRU 时间戳
+  useEffect(() => {
+    if (activeTabKey) touchTab(activeTabKey)
+  }, [activeTabKey, touchTab])
+
+  // maxOpenTabs 调小后立即裁剪现有 tab
+  useEffect(() => {
+    setOpenTabs((prev) => limitTabs(prev, activeTabKey))
+  }, [maxOpenTabs, activeTabKey, limitTabs])
+
   useEffect(() => { window.localStorage.setItem(PROJECT_VISIBLE_KEY, String(projectVisible)) }, [projectVisible])
 
   // workspace 切换时从 localStorage 加载该 workspace 下的 tab 列表与激活项
   useEffect(() => {
     if (!workspace) {
-      setOpenTabs([])
-      setActiveTabKey(null)
+      // 无 workspace 时默认打开「书籍管理」页，引导用户选择或新建书籍
+      setOpenTabs([{ kind: 'home' }])
+      setActiveTabKey('home')
+      clearSelectedFile()
       return
     }
     const tabs = readTabsFor(workspace)
-    setOpenTabs(tabs)
     const storedKey = readActiveTabKeyFor(workspace)
     const activeKey = storedKey && tabs.some((t) => tabKey(t) === storedKey) ? storedKey : (tabs.length > 0 ? tabKey(tabs[0]) : null)
+    // 重置 LRU 计数：按 tabs 顺序重新打分，激活项分数最高
+    tabActivationsRef.current = new Map()
+    tabActivationCounterRef.current = 0
+    for (const t of tabs) touchTab(tabKey(t))
+    if (activeKey) touchTab(activeKey)
+    const limited = limitTabs(tabs, activeKey)
+    setOpenTabs(limited)
     setActiveTabKey(activeKey)
     // 若激活的是文件 tab，恢复编辑器内容
     if (activeKey) {
@@ -205,9 +288,12 @@ function App() {
   useEffect(() => {
     if (!selectedFile) return
     const key = `file:${selectedFile}`
-    setOpenTabs((prev) => (prev.some((t) => tabKey(t) === key) ? prev : [...prev, { kind: 'file', path: selectedFile }]))
+    setOpenTabs((prev) => {
+      const next: Tab[] = prev.some((t) => tabKey(t) === key) ? prev : [...prev, { kind: 'file', path: selectedFile }]
+      return limitTabs(next, key)
+    })
     setActiveTabKey(key)
-  }, [selectedFile])
+  }, [selectedFile, limitTabs])
 
   /** workspace 切换后刷新目录树和聊天 */
   const handleWorkspaceSwitch = (newPath: string) => {
@@ -271,10 +357,13 @@ function App() {
     setSelectedChapterId(path)
     // 直接同步 tab 状态，避免依赖 selectedFile 的 effect（重选同一文件时 effect 不会触发）
     const key = `file:${path}`
-    setOpenTabs((prev) => (prev.some((t) => tabKey(t) === key) ? prev : [...prev, { kind: 'file', path }]))
+    setOpenTabs((prev) => {
+      const next: Tab[] = prev.some((t) => tabKey(t) === key) ? prev : [...prev, { kind: 'file', path }]
+      return limitTabs(next, key)
+    })
     setActiveTabKey(key)
     await selectFile(path)
-  }, [selectFile, setSelectedChapterId])
+  }, [limitTabs, selectFile, setSelectedChapterId])
 
   /** 激活某个 tab：文件 tab 触发文件加载，Home tab 仅切换激活态 */
   const handleActivateTab = useCallback((tab: Tab) => {
@@ -287,15 +376,21 @@ function App() {
 
   /** 打开 Home（书籍管理）tab：已存在则定位，否则追加并激活 */
   const openHomeTab = useCallback(() => {
-    setOpenTabs((prev) => (prev.some((t) => t.kind === 'home') ? prev : [...prev, { kind: 'home' }]))
+    setOpenTabs((prev) => {
+      const next: Tab[] = prev.some((t) => t.kind === 'home') ? prev : [...prev, { kind: 'home' }]
+      return limitTabs(next, 'home')
+    })
     setActiveTabKey('home')
-  }, [])
+  }, [limitTabs])
 
   /** 打开设置 tab：已存在则定位，否则追加并激活 */
   const openSettingsTab = useCallback(() => {
-    setOpenTabs((prev) => (prev.some((t) => t.kind === 'settings') ? prev : [...prev, { kind: 'settings' }]))
+    setOpenTabs((prev) => {
+      const next: Tab[] = prev.some((t) => t.kind === 'settings') ? prev : [...prev, { kind: 'settings' }]
+      return limitTabs(next, 'settings')
+    })
     setActiveTabKey('settings')
-  }, [])
+  }, [limitTabs])
 
   /** 关闭 tab；若关闭的是当前激活 tab，则切换到相邻 tab */
   const handleCloseTab = useCallback((tab: Tab) => {

@@ -44,6 +44,10 @@ type sessionRenameRequest struct {
 
 // handleSessionMessages GET /api/session/messages — 返回当前或指定会话历史消息。
 func (s *Server) handleSessionMessages(ctx context.Context, c *app.RequestContext) {
+	if !s.app.HasWorkspace() {
+		writeJSON(c, consts.StatusOK, []messageDTO{})
+		return
+	}
 	id := strings.TrimSpace(c.Query("session_id"))
 	entries, err := s.app.SessionMessages(id)
 	if err != nil {
@@ -75,6 +79,10 @@ func (s *Server) handleSessionMessages(ctx context.Context, c *app.RequestContex
 
 // handleSessions GET /api/sessions — 返回当前 workspace 下的会话列表。
 func (s *Server) handleSessions(ctx context.Context, c *app.RequestContext) {
+	if !s.app.HasWorkspace() {
+		writeJSON(c, consts.StatusOK, map[string]any{"sessions": []sessionDTO{}})
+		return
+	}
 	metas, err := s.app.Sessions()
 	if err != nil {
 		writeError(c, consts.StatusInternalServerError, err.Error())
@@ -85,6 +93,9 @@ func (s *Server) handleSessions(ctx context.Context, c *app.RequestContext) {
 
 // handleSessionCreate POST /api/sessions — 创建并激活新会话。
 func (s *Server) handleSessionCreate(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req sessionCreateRequest
 	if err := c.BindJSON(&req); err != nil {
 		writeError(c, consts.StatusBadRequest, "无效请求体")
@@ -100,6 +111,9 @@ func (s *Server) handleSessionCreate(ctx context.Context, c *app.RequestContext)
 
 // handleSessionSwitch POST /api/sessions/switch — 切换当前激活会话。
 func (s *Server) handleSessionSwitch(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req sessionIDRequest
 	if err := c.BindJSON(&req); err != nil {
 		writeError(c, consts.StatusBadRequest, "无效请求体")
@@ -115,6 +129,9 @@ func (s *Server) handleSessionSwitch(ctx context.Context, c *app.RequestContext)
 
 // handleSessionRename POST /api/sessions/rename — 重命名会话。
 func (s *Server) handleSessionRename(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req sessionRenameRequest
 	if err := c.BindJSON(&req); err != nil {
 		writeError(c, consts.StatusBadRequest, "无效请求体")
@@ -129,6 +146,9 @@ func (s *Server) handleSessionRename(ctx context.Context, c *app.RequestContext)
 
 // handleSessionDelete POST /api/sessions/delete — 删除会话并返回新的激活会话。
 func (s *Server) handleSessionDelete(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req sessionIDRequest
 	if err := c.BindJSON(&req); err != nil {
 		writeError(c, consts.StatusBadRequest, "无效请求体")

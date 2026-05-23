@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Bot, CheckCircle2, ChevronDown, ChevronRight, Clock3, FileText } from 'lucide-react'
+import { Bot, CheckCircle2, ChevronDown, ChevronRight, Circle, CircleDot, Clock3, FileText, ListTodo } from 'lucide-react'
 import type { ChatMessage } from '@/lib/api'
 
 interface MessageItemProps {
@@ -45,6 +45,9 @@ export const MessageItem = memo(function MessageItem({ message }: MessageItemPro
       return <ThinkingBlock content={content} streaming={message.streaming === true} />
 
     case 'tool_call':
+      if ((message.name || '') === 'write_todos') {
+        return <TodoListBlock message={message} />
+      }
       return <ToolExecutionBlock message={message} />
 
     case 'tool_result':
@@ -154,6 +157,124 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
       </div>
     </div>
   )
+}
+
+interface TodoItem {
+  content: string
+  activeForm?: string
+  status: 'pending' | 'in_progress' | 'completed' | string
+}
+
+/** Agentic Loop write_todos 工具卡片：渲染为可读的待办列表，兼容流式不完整 args */
+export function TodoListBlock({ message }: { message: ChatMessage }) {
+  const args = message.args || ''
+  const todos = parseTodosFromArgs(args)
+  const status = message.status || 'running'
+  const total = todos.length
+  const completed = todos.filter(t => t.status === 'completed').length
+  const inProgress = todos.find(t => t.status === 'in_progress')
+  const headline = inProgress?.activeForm || inProgress?.content || (status === 'success' ? '已更新待办列表' : '正在更新待办列表…')
+
+  return (
+    <div className="flex justify-start">
+      <div className="w-full overflow-hidden rounded-md border border-[#303238] bg-[#23252a] text-xs">
+        <div className="flex h-9 min-w-0 items-center gap-2 px-2.5">
+          <ListTodo className="h-3.5 w-3.5 shrink-0 text-[#7aa2f7]" />
+          <span className="shrink-0 font-medium text-[#d7dbe2]">待办列表</span>
+          {total > 0 && (
+            <span className="shrink-0 rounded-full border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#9aa1ad]">
+              {completed}/{total}
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-[#9aa1ad]">{headline}</span>
+        </div>
+        {todos.length > 0 && (
+          <ul className="border-t border-[#303238] bg-[#1b1c20] px-3 py-2">
+            {todos.map((todo, index) => (
+              <TodoListItem key={index} todo={todo} />
+            ))}
+          </ul>
+        )}
+        {todos.length === 0 && (
+          <div className="border-t border-[#303238] bg-[#1b1c20] px-3 py-2 text-[#9aa1ad]">
+            {status === 'running' ? '解析中…' : '空待办'}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TodoListItem({ todo }: { todo: TodoItem }) {
+  const text = todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content
+  if (todo.status === 'completed') {
+    return (
+      <li className="flex items-start gap-2 py-0.5 leading-6">
+        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7bd88f]" />
+        <span className="text-[#7f8593] line-through">{text}</span>
+      </li>
+    )
+  }
+  if (todo.status === 'in_progress') {
+    return (
+      <li className="flex items-start gap-2 py-0.5 leading-6">
+        <CircleDot className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-[#b69cff]" />
+        <span className="text-[#e4e7ee]">{text}</span>
+      </li>
+    )
+  }
+  return (
+    <li className="flex items-start gap-2 py-0.5 leading-6">
+      <Circle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#5b6070]" />
+      <span className="text-[#c8ccd4]">{text}</span>
+    </li>
+  )
+}
+
+/** 解析 write_todos 工具参数，对流式中可能不完整的 JSON 做容错 */
+function parseTodosFromArgs(args: string): TodoItem[] {
+  if (!args) return []
+  const trimmed = args.trim()
+  if (!trimmed) return []
+  // 优先尝试完整 JSON
+  try {
+    const data = JSON.parse(trimmed) as { todos?: TodoItem[] }
+    if (Array.isArray(data?.todos)) return data.todos
+  } catch {
+    // 流式中常见：args 不完整或被截断
+  }
+  // 回退：从 todos 数组中提取已经完整的对象
+  const arrayMatch = trimmed.match(/"todos"\s*:\s*\[([\s\S]*)$/)
+  if (!arrayMatch) return []
+  const body = arrayMatch[1]
+  const items: TodoItem[] = []
+  let depth = 0
+  let start = -1
+  let inString = false
+  let escape = false
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (escape) { escape = false; continue }
+    if (ch === '\\') { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') {
+      if (depth === 0) start = i
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0 && start >= 0) {
+        const piece = body.slice(start, i + 1)
+        try {
+          items.push(JSON.parse(piece) as TodoItem)
+        } catch {
+          // 单个对象解析失败时跳过
+        }
+        start = -1
+      }
+    }
+  }
+  return items
 }
 
 function ToolStatusIcon({ status }: { status: ChatMessage['status'] }) {

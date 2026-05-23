@@ -49,7 +49,38 @@ func (s *State) StyleDir() string {
 	return filepath.Join(s.SettingDir(), "styles")
 }
 
-// InitWorkspace 初始化作品工作目录结构。
+// BrainstormFileName 顶层定调文件名，存于 workspace 根目录。
+const BrainstormFileName = "脑暴.md"
+
+// brainstormTemplate 顶层定调模板。讨论定稿后内容沉淀到 outline/characters/world-building，
+// 本文件归档保留，不参与后续 Agent 上下文。
+const brainstormTemplate = `# 脑暴
+
+<!--
+  这是作品的顶层设定文件。
+  请先把你能想到的填进去，没想清楚的留空，然后告诉 Nova 一起讨论补全。
+  讨论定稿后，Nova 会基于此生成 outline / characters / world-building，
+  本文件归档保留，不再用于后续创作上下文。
+-->
+
+## 核心卖点
+（这本书最吸引人的地方）
+
+## 作品信息
+- 类型：（如：都市悬疑 / 玄幻仙侠 / 科幻硬核 / 言情甜文）
+- 目标读者：（如：男频 / 女频 / 通用）
+- 整体基调：（如：暗黑压抑 / 热血燃向 / 温馨治愈）
+
+## 金手指 / 独特设定
+（区别于同类作品的钩子，可以去掉）
+
+## 其他要求
+
+## 参考作品
+（"类似 XX + YY 的感觉"，用来对齐风格期待）
+`
+
+// InitWorkspace 初始化作品工作目录结构，并在缺失时写入「脑暴.md」顶层定调模板。
 func (s *State) InitWorkspace() error {
 	dirs := []string{
 		s.NovaDir(),
@@ -64,7 +95,25 @@ func (s *State) InitWorkspace() error {
 			return fmt.Errorf("创建目录 %s 失败: %w", dir, err)
 		}
 	}
+
+	brainstormPath := filepath.Join(s.workspace, BrainstormFileName)
+	if _, err := os.Stat(brainstormPath); os.IsNotExist(err) {
+		if writeErr := os.WriteFile(brainstormPath, []byte(brainstormTemplate), 0o644); writeErr != nil {
+			return fmt.Errorf("写入 %s 失败: %w", BrainstormFileName, writeErr)
+		}
+	} else if err != nil {
+		return fmt.Errorf("检查 %s 失败: %w", BrainstormFileName, err)
+	}
+
+	if err := ensureCreatorTemplate(s.workspace); err != nil {
+		return err
+	}
 	return nil
+}
+
+// BrainstormPath 返回脑暴文件绝对路径。
+func (s *State) BrainstormPath() string {
+	return filepath.Join(s.workspace, BrainstormFileName)
 }
 
 // CompactContext 读取 setting/ 下所有状态文件，构建分级注入的上下文字符串。

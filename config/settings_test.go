@@ -54,6 +54,25 @@ func TestMergePointerExplicitOverride(t *testing.T) {
 	}
 }
 
+func TestMergeStyleRules(t *testing.T) {
+	parent := Settings{StyleRules: []StyleRule{{Scene: "打斗", Styles: []string{"古龙.md"}}}}
+	// nil 切片视为未设置，应继承
+	out := Merge(parent, Settings{})
+	if len(out.StyleRules) != 1 || out.StyleRules[0].Scene != "打斗" {
+		t.Fatalf("nil child should inherit parent: %+v", out.StyleRules)
+	}
+	// 显式空切片视为清空
+	out = Merge(parent, Settings{StyleRules: []StyleRule{}})
+	if len(out.StyleRules) != 0 {
+		t.Fatalf("empty slice should clear: %+v", out.StyleRules)
+	}
+	// 非空切片应整体覆盖
+	out = Merge(parent, Settings{StyleRules: []StyleRule{{Scene: "对话", Styles: []string{"温吞.md"}}}})
+	if len(out.StyleRules) != 1 || out.StyleRules[0].Scene != "对话" {
+		t.Fatalf("non-empty child should override: %+v", out.StyleRules)
+	}
+}
+
 func TestReadSettingsFileMissingReturnsZero(t *testing.T) {
 	s, err := ReadSettingsFile(filepath.Join(t.TempDir(), "nope.toml"))
 	if err != nil {

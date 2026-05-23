@@ -2,26 +2,19 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-
-	"nova/internal/book"
 )
 
 // safeToolMiddleware 将工具执行错误转为可读的错误消息返回给模型。
 type safeToolMiddleware struct {
 	*adk.BaseChatModelAgentMiddleware
-	workspace string
 }
 
 func (m *safeToolMiddleware) WrapInvokableToolCall(
@@ -30,11 +23,6 @@ func (m *safeToolMiddleware) WrapInvokableToolCall(
 	toolCtx *adk.ToolContext,
 ) (adk.InvokableToolCallEndpoint, error) {
 	return func(ctx context.Context, args string, opts ...tool.Option) (string, error) {
-		if shouldSnapshotBeforeChapterWrite(m.workspace, toolCtx, args) {
-			if err := autoCommitBeforeChapterWrite(ctx, m.workspace); err != nil {
-				return fmt.Sprintf("[tool error] 写章节前自动创建版本失败: %v", err), nil
-			}
-		}
 		result, err := endpoint(ctx, args, opts...)
 		if err != nil {
 			if _, ok := compose.IsInterruptRerunError(err); ok {
@@ -52,11 +40,6 @@ func (m *safeToolMiddleware) WrapStreamableToolCall(
 	toolCtx *adk.ToolContext,
 ) (adk.StreamableToolCallEndpoint, error) {
 	return func(ctx context.Context, args string, opts ...tool.Option) (*schema.StreamReader[string], error) {
-		if shouldSnapshotBeforeChapterWrite(m.workspace, toolCtx, args) {
-			if err := autoCommitBeforeChapterWrite(ctx, m.workspace); err != nil {
-				return singleChunkReader(fmt.Sprintf("[tool error] 写章节前自动创建版本失败: %v", err)), nil
-			}
-		}
 		sr, err := endpoint(ctx, args, opts...)
 		if err != nil {
 			if _, ok := compose.IsInterruptRerunError(err); ok {
@@ -92,58 +75,4 @@ func safeWrapReader(sr *schema.StreamReader[string]) *schema.StreamReader[string
 		}
 	}()
 	return r
-}
-
-type writeFileToolArgs struct {
-	FilePath string `json:"file_path"`
-}
-
-// shouldSnapshotBeforeChapterWrite 判断 write_file 是否即将写入章节正文。
-func shouldSnapshotBeforeChapterWrite(workspace string, toolCtx *adk.ToolContext, args string) bool {
-	if workspace == "" || toolCtx == nil || toolCtx.Name != "write_file" {
-		return false
-	}
-	var parsed writeFileToolArgs
-	if err := json.Unmarshal([]byte(args), &parsed); err != nil || strings.TrimSpace(parsed.FilePath) == "" {
-		return false
-	}
-	targetPath := parsed.FilePath
-	if !filepath.IsAbs(targetPath) {
-		targetPath = filepath.Join(workspace, targetPath)
-	}
-	absTarget, err := filepath.Abs(filepath.Clean(targetPath))
-	if err != nil {
-		return false
-	}
-	chaptersDir, err := filepath.Abs(filepath.Join(workspace, "chapters"))
-	if err != nil {
-		return false
-	}
-	return absTarget == chaptersDir || strings.HasPrefix(absTarget, chaptersDir+string(filepath.Separator))
-}
-
-// autoCommitBeforeChapterWrite 在写章节前保存当前工作区快照。
-func autoCommitBeforeChapterWrite(ctx context.Context, workspace string) error {
-	gitService := book.NewGitService(workspace)
-	status, err := gitService.Status(ctx)
-	if err != nil {
-		return err
-	}
-	if !status.Initialized {
-		if _, initErr := gitService.Init(ctx); initErr != nil {
-			return initErr
-		}
-		status, err = gitService.Status(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	if status.Clean {
-		return nil
-	}
-	message := "Nova 自动快照：写章节前 " + time.Now().Format("2006-01-02 15:04:05")
-	if _, err := gitService.CreateVersion(ctx, message); err != nil && !errors.Is(err, book.ErrGitClean) {
-		return err
-	}
-	return nil
 }

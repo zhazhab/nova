@@ -36,6 +36,17 @@ type ChatRequest struct {
 	StyleReferences []string           `json:"style_references"`
 	Selections      []TextSelectionRef `json:"selections"`
 	PlanMode        bool               `json:"plan_mode"`
+
+	// StyleRules 由后端按工作区配置注入（场景 → 风格文件）。
+	// 仅当 StyleReferences 为空时才会作为"默认场景化建议"参与本轮上下文，
+	// 由 Agent 基于本轮章节内容自动匹配最相近的场景并 read_file 对应文件。
+	StyleRules []StyleRule `json:"-"`
+}
+
+// StyleRule 是 config.StyleRule 的镜像，避免 agent 直接依赖 config 包。
+type StyleRule struct {
+	Scene  string
+	Styles []string
 }
 
 // TextSelectionRef 表示用户在编辑器中选中的一段文本引用。
@@ -72,10 +83,13 @@ func (s *ChatService) Run(
 	}
 	if len(req.StyleReferences) > 0 {
 		agentMessage = appendStyleReferenceContext(bookService, agentMessage, req.StyleReferences)
+	} else if len(req.StyleRules) > 0 {
+		agentMessage = appendStyleRulesHint(agentMessage, req.StyleRules)
 	}
 	if len(req.Selections) > 0 {
 		agentMessage = appendSelectionContext(agentMessage, req.Selections)
 	}
+	agentMessage = appendContextBoundaryInstruction(agentMessage)
 
 	_ = sess.Append(schema.UserMessage(req.Message))
 	history := append([]*schema.Message(nil), sess.GetEffectiveMessages()...)
@@ -85,7 +99,7 @@ func (s *ChatService) Run(
 
 	events := runner.Run(ctx, history)
 	var fullContent strings.Builder
-	log.Printf("[agent-run] started history=%d message_len=%d agent_message_len=%d plan_mode=%v", len(history), len(req.Message), len(agentMessage), req.PlanMode)
+	log.Printf("[agent-run] started history=%d message_len=%d agent_message_len=%d plan_mode=%v style_references=%d style_rules=%d", len(history), len(req.Message), len(agentMessage), req.PlanMode, len(req.StyleReferences), len(req.StyleRules))
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -240,6 +254,42 @@ func appendStyleReferenceContext(bookService *book.Service, message string, styl
 		sb.WriteString("\n```\n")
 	}
 
+	return sb.String()
+}
+
+// appendStyleRulesHint 在用户本轮未通过 # 指定风格时，
+// 把工作区配置的「场景 → 风格文件」规则集作为建议附加到上下文。
+// 不直接读取文件内容，由 Agent 基于本轮章节内容自行判断：
+//   - 仅当本轮属于章节正文创作 / 续写 / 重写时，才从规则集中挑选最匹配当前场景的一条（或多条），
+//     再用 read_file 读取对应文件作为文风参考；
+//   - 若本轮属于脑暴、大纲、设定、问答、规划等非章节正文场景，则全部忽略；
+//   - 若没有任何场景匹配，可不读取，避免强行套用不合适的风格。
+func appendStyleRulesHint(message string, rules []StyleRule) string {
+	var sb strings.Builder
+	sb.WriteString(message)
+	sb.WriteString("\n\n---\n[场景化默认风格规则] 当前工作区配置了以下「场景 → 风格文件」映射（风格文件位于 setting/styles/ 下）：\n")
+	for i, rule := range rules {
+		scene := strings.TrimSpace(rule.Scene)
+		if scene == "" || len(rule.Styles) == 0 {
+			continue
+		}
+		fmt.Fprintf(&sb, "%d. 场景：%s\n   风格：", i+1, scene)
+		first := true
+		for _, s := range rule.Styles {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if !first {
+				sb.WriteString("、")
+			}
+			sb.WriteString(s)
+			first = false
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n触发规则：仅当你判断本轮要执行『章节正文的创作 / 续写 / 重写』时，先根据当前章节内容选出最贴近的场景，再用 read_file 读取该场景对应的风格文件，把它们作为文风、节奏、叙述方式、句式和氛围的参考；不要照搬其中的人物、情节或设定。\n")
+	sb.WriteString("若本轮属于脑暴、大纲、设定、问答、规划等非章节正文场景，请完全忽略以上规则，不要读取任何风格文件；若没有场景明显匹配，也不必强行选择。\n")
 	return sb.String()
 }
 
@@ -525,6 +575,19 @@ func appendPlanModeInstruction(message string) string {
 6. 等待用户确认或调整计划后再执行
 
 用户需求：
+` + message
+}
+
+// appendContextBoundaryInstruction 在用户消息前追加上下文边界说明，
+// 强调当前请求才是“这次要做什么”，工作区/已确认小说状态是“背景是什么”，
+// 历史对话只能用于辅助理解，不能直接成为本轮执行依据。
+func appendContextBoundaryInstruction(message string) string {
+	return `[上下文边界]
+- 当前用户请求是“这次要做什么”，请只按本轮请求、显式 @ 引用、# 风格参考和编辑器选区行动。
+- 历史对话只能辅助理解上下文，不要把上一轮的待办、工具意图或未完成动作当成本轮指令，除非用户在本轮明确延续。
+- 如果当前请求与历史看起来无关或冲突，以当前请求为准，不要继续执行上一轮的工具调用或修改。
+
+本轮请求：
 ` + message
 }
 

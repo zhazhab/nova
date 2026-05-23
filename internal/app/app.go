@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cloudwego/eino/adk"
 
@@ -250,6 +251,9 @@ func (a *App) GitStatus(ctx context.Context) (book.GitStatus, error) {
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitStatus{}, ErrNoWorkspace
+	}
 	return gitService.Status(ctx)
 }
 
@@ -258,6 +262,9 @@ func (a *App) GitHistory(ctx context.Context, limit int) ([]book.GitCommit, erro
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return nil, ErrNoWorkspace
+	}
 	return gitService.History(ctx, limit)
 }
 
@@ -266,6 +273,9 @@ func (a *App) GitDiff(ctx context.Context, path string) (string, error) {
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return "", ErrNoWorkspace
+	}
 	return gitService.Diff(ctx, path)
 }
 
@@ -274,6 +284,9 @@ func (a *App) InitGit(ctx context.Context) (book.GitCommandResult, error) {
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.Init(ctx)
 }
 
@@ -282,6 +295,9 @@ func (a *App) CreateGitVersion(ctx context.Context, message string) (book.GitCom
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.CreateVersion(ctx, message)
 }
 
@@ -290,6 +306,9 @@ func (a *App) RollbackGitVersion(ctx context.Context, hash string) (book.GitComm
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.Rollback(ctx, hash)
 }
 
@@ -298,6 +317,9 @@ func (a *App) StashGitChanges(ctx context.Context) (book.GitCommandResult, error
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.Stash(ctx)
 }
 
@@ -306,6 +328,9 @@ func (a *App) PopGitStash(ctx context.Context) (book.GitCommandResult, error) {
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.PopStash(ctx)
 }
 
@@ -314,6 +339,9 @@ func (a *App) RunGitCommand(ctx context.Context, input string) (book.GitCommandR
 	a.mu.RLock()
 	gitService := a.gitService
 	a.mu.RUnlock()
+	if gitService == nil {
+		return book.GitCommandResult{}, ErrNoWorkspace
+	}
 	return gitService.RunCommand(ctx, input)
 }
 
@@ -322,6 +350,9 @@ func (a *App) ClearSession() error {
 	a.mu.RLock()
 	sess := a.session
 	a.mu.RUnlock()
+	if sess == nil {
+		return ErrNoWorkspace
+	}
 	return sess.Clear()
 }
 
@@ -329,8 +360,14 @@ func (a *App) ClearSession() error {
 func (a *App) Sessions() ([]session.SessionMeta, error) {
 	a.mu.RLock()
 	store := a.sessionStore
-	activeID := a.session.ID
+	var activeID string
+	if a.session != nil {
+		activeID = a.session.ID
+	}
 	a.mu.RUnlock()
+	if store == nil {
+		return nil, ErrNoWorkspace
+	}
 	return store.List(activeID)
 }
 
@@ -338,6 +375,9 @@ func (a *App) Sessions() ([]session.SessionMeta, error) {
 func (a *App) CreateSession(title string) (*session.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.sessionStore == nil {
+		return nil, ErrNoWorkspace
+	}
 	a.abortActiveTaskLocked()
 
 	sess, err := a.sessionStore.Create(title)
@@ -356,6 +396,9 @@ func (a *App) CreateSession(title string) (*session.Session, error) {
 func (a *App) SwitchSession(id string) (*session.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.sessionStore == nil {
+		return nil, ErrNoWorkspace
+	}
 	a.abortActiveTaskLocked()
 
 	sess, err := a.sessionStore.Get(id)
@@ -375,6 +418,9 @@ func (a *App) RenameSession(id, title string) error {
 	a.mu.RLock()
 	store := a.sessionStore
 	a.mu.RUnlock()
+	if store == nil {
+		return ErrNoWorkspace
+	}
 	return store.Rename(id, title)
 }
 
@@ -382,6 +428,9 @@ func (a *App) RenameSession(id, title string) error {
 func (a *App) DeleteSession(id string) (*session.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.sessionStore == nil {
+		return nil, ErrNoWorkspace
+	}
 
 	wasActive := a.session != nil && a.session.ID == id
 	if wasActive {
@@ -430,7 +479,13 @@ func (a *App) SessionMessages(id string) ([]session.HistoryEntry, error) {
 	store := a.sessionStore
 	current := a.session
 	a.mu.RUnlock()
+	if store == nil {
+		return nil, ErrNoWorkspace
+	}
 	if id == "" {
+		if current == nil {
+			return nil, ErrNoWorkspace
+		}
 		return current.History(), nil
 	}
 	sess, err := store.Get(id)
@@ -443,6 +498,11 @@ func (a *App) SessionMessages(id string) ([]session.HistoryEntry, error) {
 // StartTask 启动后台 Agent 任务。如果有正在运行的任务，先终止它。
 func (a *App) StartTask(req agent.ChatRequest) *Task {
 	a.mu.Lock()
+	if a.agentRunner == nil || a.session == nil {
+		a.mu.Unlock()
+		log.Printf("[agent-task] 未选择 workspace，无法启动任务")
+		return nil
+	}
 	if a.activeTask != nil && a.activeTask.Status() == TaskRunning {
 		log.Printf("[agent-task] replace running task id=%s", a.activeTask.ID())
 		a.activeTask.Abort()
@@ -452,10 +512,47 @@ func (a *App) StartTask(req agent.ChatRequest) *Task {
 	sess := a.session
 	bookService := a.bookService
 	chatService := a.chatService
+	workspace := a.workspace
+	gitService := a.gitService
+	novaDir := ""
+	if a.cfg != nil {
+		novaDir = a.cfg.NovaDir
+	}
 	a.mu.Unlock()
 
+	// 对话前自动 commit：默认阈值 50 行；失败不阻断对话，仅记录日志。
+	if gitService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		result, err := gitService.AutoCommit(ctx, book.DefaultAutoCommitLineThreshold)
+		cancel()
+		if err != nil {
+			log.Printf("[auto-commit] workspace=%s 失败 err=%v", workspace, err)
+		} else if result.Skipped {
+			log.Printf("[auto-commit] workspace=%s 跳过 reason=%q lines=%d", workspace, result.Reason, result.Lines)
+		} else {
+			log.Printf("[auto-commit] workspace=%s 已提交 commit=%s lines=%d", workspace, result.Commit, result.Lines)
+		}
+	}
+
+	// 注入工作区配置中的默认风格参考；仅在用户本轮未指定 # 风格时生效。
+	if len(req.StyleReferences) == 0 {
+		if layered, err := config.LoadLayered(novaDir, workspace); err == nil {
+			rules := layered.Effective.StyleRules
+			if len(rules) > 0 {
+				converted := make([]agent.StyleRule, 0, len(rules))
+				for _, r := range rules {
+					converted = append(converted, agent.StyleRule{Scene: r.Scene, Styles: r.Styles})
+				}
+				req.StyleRules = converted
+				log.Printf("[agent-task] inject style rules count=%d", len(converted))
+			}
+		} else {
+			log.Printf("[agent-task] load layered settings for style rules failed err=%v", err)
+		}
+	}
+
 	task := NewTask(func(ctx context.Context, task *Task, emit func(agent.Event)) {
-		log.Printf("[agent-task] run begin id=%s message_len=%d references=%d style_references=%d selections=%d plan_mode=%v", task.ID(), len(req.Message), len(req.References), len(req.StyleReferences), len(req.Selections), req.PlanMode)
+		log.Printf("[agent-task] run begin id=%s message_len=%d references=%d style_references=%d style_rules=%d selections=%d plan_mode=%v", task.ID(), len(req.Message), len(req.References), len(req.StyleReferences), len(req.StyleRules), len(req.Selections), req.PlanMode)
 		chatService.Run(ctx, runner, sess, bookService, req, emit)
 		log.Printf("[agent-task] run end id=%s status=%s", task.ID(), task.Status())
 	})

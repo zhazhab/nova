@@ -18,7 +18,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 const COMMANDS = [
   { cmd: '/plan', desc: '先规划再执行' },
   { cmd: '/clear', desc: '清空对话' },
-  { cmd: '/init', desc: '初始化项目' },
   { cmd: '/status', desc: '查看状态' },
   { cmd: '/help', desc: '帮助信息' },
   { cmd: '/outline', desc: '生成大纲' },

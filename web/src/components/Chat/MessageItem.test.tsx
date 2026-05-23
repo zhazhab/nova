@@ -50,4 +50,51 @@ describe('MessageItem', () => {
     expect(screen.getByText('write_file')).toBeInTheDocument()
     expect(screen.getByText('写入完成')).toBeInTheDocument()
   })
+
+  it('write_todos 工具卡片渲染为待办列表，并显示进度', () => {
+    const args = JSON.stringify({
+      todos: [
+        { content: '梳理需求', activeForm: '梳理需求中', status: 'completed' },
+        { content: '实现接口', activeForm: '实现接口中', status: 'in_progress' },
+        { content: '补充测试', activeForm: '补充测试中', status: 'pending' },
+      ],
+    })
+
+    render(
+      <MessageItem
+        message={{
+          role: 'tool_call',
+          content: 'write_todos',
+          name: 'write_todos',
+          args,
+          status: 'running',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('待办列表')).toBeInTheDocument()
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('梳理需求')).toBeInTheDocument()
+    expect(screen.getAllByText('实现接口中').length).toBeGreaterThan(0)
+    expect(screen.getByText('补充测试')).toBeInTheDocument()
+  })
+
+  it('write_todos 工具卡片在流式不完整 JSON 时仍能渲染已完整的 todo 项', () => {
+    const partial = '{"todos":[{"content":"第一项","activeForm":"做第一项","status":"completed"},{"content":"第二项","activeForm":"做第二项","stat'
+
+    render(
+      <MessageItem
+        message={{
+          role: 'tool_call',
+          content: 'write_todos',
+          name: 'write_todos',
+          args: partial,
+          status: 'running',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('待办列表')).toBeInTheDocument()
+    expect(screen.getByText('第一项')).toBeInTheDocument()
+  })
 })

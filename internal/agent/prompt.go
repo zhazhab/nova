@@ -33,8 +33,8 @@ func BuildInstruction(cfg *config.Config, state *book.State) string {
 7. 风格参考只用于文风、节奏、叙述方式、句式和氛围，不要照搬内容、人物、情节或设定
 8. 创建章节文件时必须遵循 chapters/chXX-章节名.md 命名，例如 chapters/ch01-废材开局.md
 9. 修改现有文件的局部内容时优先使用 edit_file 工具（精确替换），避免用 write_file 重写整个文件
-10. 每次写入新章节前，系统会自动提交一次原本的 Git 工作区快照；如果自动提交失败，必须先解决版本保存问题，不能继续覆盖章节正文
-11. chapters/ 下的正文文件使用纯文本格式，禁止使用 Markdown 标记语法（如 #、**、- 列表、> 引用、代码块等）。正文只允许自然段落，段落间空行分隔。分割线可用 --- 。唯一例外是对话引号和省略号等标点
+10. chapters/ 下的正文文件使用纯文本格式，禁止使用 Markdown 标记语法（如 #、**、- 列表、> 引用、代码块等）。正文只允许自然段落，段落间空行分隔。分割线可用 --- 。唯一例外是对话引号和省略号等标点
+11. 所有对话都要描写成对应文本语言的对话
 
 ## 文件工具说明
 
@@ -50,6 +50,7 @@ func BuildInstruction(cfg *config.Config, state *book.State) string {
 作品根目录：%s
 
 目录结构：
+- %s/脑暴.md — 顶层定调（题材、卖点、读者、风格、剧情走向等），仅在大纲生成前的讨论阶段使用，定稿后不再注入上下文
 - %s/setting/outline.md — 故事长期结构和章节方向，只记录规划中的主线、卷章安排和章节目标；不要混入已写进度、正文复盘或角色临时状态
 - %s/setting/characters.md — 角色卡片（姓名、性格、关系、能力、当前状态），只记录角色设定和随剧情变化后的状态；不要混入章节大纲或未来情节安排
 - %s/setting/world-building.md — 世界观设定
@@ -67,32 +68,32 @@ func BuildInstruction(cfg *config.Config, state *book.State) string {
 4. 避免职责混写：不要把 progress 的已写摘要塞进 outline，不要把 outline 的章节规划塞进 characters，不要把角色卡片写成剧情大纲
 
 ### 生成大纲时
-1. 与作者讨论故事构思
-2. 生成结构化大纲 → write_file 到 setting/outline.md
+1. 先 read_file 脑暴.md，与作者一起讨论补全顶层定调（题材、卖点、读者、整体风格、金手指、故事尺度、剧情走向、参考作品等）；脑暴.md 字段仍为模板占位或留空时，不要直接进入下一步，先引导作者完善
+2. 作者明确确认顶层设定定稿后，再 write_file 生成 setting/outline.md
 3. 提取角色 → write_file 到 setting/characters.md
 4. 提取世界观 → write_file 到 setting/world-building.md
 5. 初始化 setting/progress.md
+6. 大纲生成后，脑暴.md 不再修改，也不再作为后续创作上下文参考
 
 ### 续写章节时
 1. read_file setting/outline.md、characters.md、progress.md
 2. 必须 read_file 前面至少 2 章正文，确保情节、时间、地点和人物状态自然衔接
-3. 写入章节前会自动创建“写章节前”的 Git 快照，保存原本工作区；若快照失败，停止写入并向作者说明
-4. 创作本章，write_file 到 chapters/chXX-章节名.md
-5. 不更改 outline.md，大纲只作为写作方向参考
-6. 只更新 progress.md 和 characters.md，记录本章完成后的进度与角色状态变化
+3. 创作本章，write_file 到 chapters/chXX-章节名.md
+4. 不更改 outline.md，大纲只作为写作方向参考
+5. 只更新 progress.md 和 characters.md，角色只更新有明确变化的角色的状态，不过多更新，记录本章完成后的进度与角色状态变化
 
 ### 重写/修改时
 1. 重写章节时，一切以创作者本轮要求为最高优先级；只考虑该章节与前后章节内容的衔接
 2. 重写时忽略 progress、characters 等状态文件中“该章节新增内容”的约束，避免被旧进度或人设摘要绑架
 3. 局部修改用 edit_file（精确替换指定段落），全量重写用 write_file
 4. 完成后根据最终正文同步更新 progress.md 和 characters.md；除非作者明确要求调整大纲，不更新 outline.md`,
-		ws, ws, ws, ws, ws, ws, ws, ws))
+		ws, ws, ws, ws, ws, ws, ws, ws, ws))
 
 	if stateCtx := state.CompactContext(); stateCtx != "" {
 		sb.WriteString("\n\n# 当前作品状态\n\n")
 		sb.WriteString(stateCtx)
 	} else {
-		sb.WriteString("\n\n# 当前作品状态\n\n这是一个新的作品，尚未创建大纲和角色。等待作者描述故事构思。")
+		sb.WriteString("\n\n# 当前作品状态\n\n这是一个新的作品，尚未生成大纲和角色。请先打开作品根目录下的 `脑暴.md` 完成顶层定调初稿（题材、核心卖点、目标读者、整体风格、剧情走向等），再回到对话告诉作者愿意一起讨论补全；待作者确认定稿后，才生成 setting/outline.md、characters.md、world-building.md 和 progress.md。在此之前不要直接编造大纲或角色。")
 	}
 
 	return sb.String()

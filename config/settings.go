@@ -24,11 +24,26 @@ type Settings struct {
 	AutoSaveEnabled       *bool  `toml:"auto_save_enabled,omitempty" json:"auto_save_enabled,omitempty"`
 	AutoSaveIntervalMs    *int   `toml:"auto_save_interval_ms,omitempty" json:"auto_save_interval_ms,omitempty"`
 	ChapterFilenameFormat string `toml:"chapter_filename_format,omitempty" json:"chapter_filename_format,omitempty"`
+	MaxOpenTabs           *int   `toml:"max_open_tabs,omitempty" json:"max_open_tabs,omitempty"`
 
 	// Agent
 	MaxIteration    *int  `toml:"max_iteration,omitempty" json:"max_iteration,omitempty"`
 	ModelMaxRetries *int  `toml:"model_max_retries,omitempty" json:"model_max_retries,omitempty"`
 	PlanModeDefault *bool `toml:"plan_mode_default,omitempty" json:"plan_mode_default,omitempty"`
+
+	// 风格：场景化默认风格规则（仅工作区级生效）。
+	// 每条规则关联一个自然语言场景描述与若干 setting/styles/ 下的风格文件，
+	// 由 Agent 基于本轮章节内容自动匹配场景并选择对应风格文件。
+	// 当用户本轮通过 # 指定了任意风格参考时，本轮覆盖默认规则。
+	StyleRules []StyleRule `toml:"style_rules,omitempty" json:"style_rules,omitempty"`
+}
+
+// StyleRule 表示一条「场景 → 风格文件」映射。
+// Scene 使用自然语言描述触发条件（如「激烈打斗」「日常对话」「宏大世界观铺陈」）；
+// Styles 是 setting/styles/ 下的相对路径列表。
+type StyleRule struct {
+	Scene  string   `toml:"scene" json:"scene"`
+	Styles []string `toml:"styles" json:"styles"`
 }
 
 func boolPtr(v bool) *bool { return &v }
@@ -44,6 +59,7 @@ func DefaultSettings() Settings {
 		AutoSaveEnabled:       boolPtr(true),
 		AutoSaveIntervalMs:    intPtr(1500),
 		ChapterFilenameFormat: "ch{NN}-{title}.md",
+		MaxOpenTabs:           intPtr(5),
 		MaxIteration:          intPtr(50),
 		ModelMaxRetries:       intPtr(5),
 		PlanModeDefault:       boolPtr(false),
@@ -78,6 +94,9 @@ func Merge(parent, child Settings) Settings {
 	if child.ChapterFilenameFormat != "" {
 		out.ChapterFilenameFormat = child.ChapterFilenameFormat
 	}
+	if child.MaxOpenTabs != nil {
+		out.MaxOpenTabs = child.MaxOpenTabs
+	}
 	if child.MaxIteration != nil {
 		out.MaxIteration = child.MaxIteration
 	}
@@ -86,6 +105,10 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.PlanModeDefault != nil {
 		out.PlanModeDefault = child.PlanModeDefault
+	}
+	// 场景化风格规则：工作区级覆盖，nil 视为未设置；空切片表示显式清空。
+	if child.StyleRules != nil {
+		out.StyleRules = child.StyleRules
 	}
 	return out
 }

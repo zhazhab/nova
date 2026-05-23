@@ -31,14 +31,18 @@ func (s *Server) handleCommand(ctx context.Context, c *app.RequestContext) {
 	var result string
 	switch cmd {
 	case "clear":
+		if !s.requireWorkspace(c) {
+			return
+		}
 		if err := s.app.ClearSession(); err != nil {
 			result = fmt.Sprintf("清空失败: %v", err)
 		} else {
 			result = "上下文已清理，历史消息已保留"
 		}
-	case "init":
-		result = s.app.BookService().InitCreatorPrompt()
 	case "status":
+		if !s.requireWorkspace(c) {
+			return
+		}
 		_, stateCtx := s.app.Status()
 		if stateCtx == "" {
 			result = "当前无作品状态数据，请先创建大纲"
@@ -61,7 +65,6 @@ func helpText() string {
 
   plan   — 先规划再执行（/plan <需求描述>）
   clear  — 清理当前 Agent 上下文并保留历史消息
-  init   — 初始化 CREATOR.md 创作者指令模板
   status — 显示当前作品状态
   help   — 显示此帮助信息
 

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import type { LayeredSettings, Settings, SettingsLayer } from './types'
+import type { LayeredSettings, Settings, SettingsLayer, StyleRule } from './types'
 import { fetchSettings, updateUserSettings, updateWorkspaceSettings } from './api'
+import { getStyles } from '@/lib/api'
 
 export function SettingsView() {
   const [layered, setLayered] = useState<LayeredSettings | null>(null)
@@ -9,6 +10,7 @@ export function SettingsView() {
   const [draft, setDraft] = useState<Settings>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [availableStyles, setAvailableStyles] = useState<string[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -21,6 +23,14 @@ export function SettingsView() {
   }, [activeLayer])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    // 仅工作区层需要风格列表；切换层时按需加载即可，失败不阻塞主体配置展示。
+    if (activeLayer !== 'workspace') return
+    getStyles()
+      .then((items) => setAvailableStyles(items))
+      .catch((e) => console.warn('[settings] 获取风格参考列表失败', e))
+  }, [activeLayer])
 
   useEffect(() => {
     if (!layered) return
@@ -36,6 +46,10 @@ export function SettingsView() {
       const updater = activeLayer === 'user' ? updateUserSettings : updateWorkspaceSettings
       const next = await updater(draft)
       setLayered(next)
+      // 通知应用层重新读取分层配置（如 max_open_tabs 等需要立即生效的设置）
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nova:settings-updated'))
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -108,6 +122,9 @@ export function SettingsView() {
           <Text label="章节文件名模板" value={draft.chapter_filename_format}
                 placeholder={placeholderFor('chapter_filename_format')}
                 onChange={(v) => setField('chapter_filename_format', v)} />
+          <Num label="最大同时打开 Tab 数" value={draft.max_open_tabs ?? null}
+               placeholder={placeholderFor('max_open_tabs')}
+               onChange={(v) => setField('max_open_tabs', v)} />
         </Section>
 
         <Section title="Agent">
@@ -121,6 +138,17 @@ export function SettingsView() {
                    effective={effective.plan_mode_default}
                    onChange={(v) => setField('plan_mode_default', v)} />
         </Section>
+
+        {activeLayer === 'workspace' && (
+          <Section title="场景化风格规则">
+            <StyleRulesEditor
+              available={availableStyles}
+              rules={draft.style_rules ?? []}
+              effective={effective.style_rules ?? []}
+              onChange={(v) => setField('style_rules', v)}
+            />
+          </Section>
+        )}
       </div>
     </div>
   )
@@ -207,5 +235,138 @@ function BoolTri({ label, value, effective, onChange }: {
         <option value="false">关闭</option>
       </select>
     </label>
+  )
+}
+
+function StyleRulesEditor({ available, rules, effective, onChange }: {
+  available: string[]
+  rules: StyleRule[]
+  effective: StyleRule[]
+  onChange: (v: StyleRule[]) => void
+}) {
+  const addRule = () => onChange([...rules, { scene: '', styles: [] }])
+  const removeRule = (idx: number) => onChange(rules.filter((_, i) => i !== idx))
+  const updateRule = (idx: number, patch: Partial<StyleRule>) =>
+    onChange(rules.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+  const inheriting = rules.length === 0 && effective.length > 0
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-[#9aa0aa]">
+        为不同场景配置不同的风格参考。Agent 在创作章节正文时，会根据本轮要写的内容自动匹配最贴近的场景，并 read_file 读取对应风格文件作为文风参考。
+        本轮通过 # 显式指定风格则优先使用本轮指定，忽略此处规则。
+      </div>
+
+      {inheriting && (
+        <div className="rounded border border-[#303238] bg-[#18191c] px-3 py-2 text-[#7f8590]">
+          继承生效（{effective.length} 条规则）：
+          <ul className="mt-1 space-y-0.5">
+            {effective.map((r, i) => (
+              <li key={i}>
+                <span className="text-[#c5c9d1]">{r.scene || '（未命名场景）'}</span>
+                <span className="ml-2">→ {r.styles.join('、') || '（无风格文件）'}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {rules.length > 0 && (
+        <div className="space-y-2">
+          {rules.map((rule, idx) => (
+            <StyleRuleRow
+              key={idx}
+              available={available}
+              rule={rule}
+              onChange={(patch) => updateRule(idx, patch)}
+              onRemove={() => removeRule(idx)}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={addRule}
+          className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-[#d7dbe2] hover:bg-[#2a2b30]"
+        >
+          + 新增规则
+        </button>
+        {available.length === 0 && (
+          <span className="text-[#7f8590]">提示：当前工作区 setting/styles/ 下尚无任何风格文件。</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StyleRuleRow({ available, rule, onChange, onRemove }: {
+  available: string[]
+  rule: StyleRule
+  onChange: (patch: Partial<StyleRule>) => void
+  onRemove: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const toggleStyle = (path: string) => {
+    if (rule.styles.includes(path)) {
+      onChange({ styles: rule.styles.filter((p) => p !== path) })
+    } else {
+      onChange({ styles: [...rule.styles, path] })
+    }
+  }
+  const summary = rule.styles.length === 0 ? '尚未选择风格文件' : rule.styles.join('、')
+
+  return (
+    <div className="rounded border border-[#303238] bg-[#18191c] p-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={rule.scene}
+          placeholder="场景描述（如：激烈打斗 / 日常对话 / 宏大世界观铺陈）"
+          onChange={(e) => onChange({ scene: e.target.value })}
+          className="flex-1 rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-[#d7dbe2]"
+        />
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-[#9aa0aa] hover:bg-[#2a2b30]"
+          title={expanded ? '收起' : '展开选择风格'}
+        >
+          {expanded ? '收起' : `风格 (${rule.styles.length})`}
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-[#9aa0aa] hover:bg-[#2a2b30]"
+          title="删除规则"
+        >
+          删除
+        </button>
+      </div>
+
+      {!expanded && (
+        <div className="mt-1 truncate text-[#7f8590]">→ {summary}</div>
+      )}
+
+      {expanded && (
+        <div className="mt-2 max-h-48 overflow-y-auto rounded border border-[#303238] bg-[#1b1c1f]">
+          {available.length === 0 ? (
+            <div className="px-2 py-2 text-[#7f8590]">无可用风格文件</div>
+          ) : (
+            available.map((path) => (
+              <label key={path} className="flex cursor-pointer items-center gap-2 px-2 py-1 hover:bg-[#2a2b30]">
+                <input
+                  type="checkbox"
+                  checked={rule.styles.includes(path)}
+                  onChange={() => toggleStyle(path)}
+                />
+                <span className="text-[#d7dbe2]">{path}</span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   )
 }

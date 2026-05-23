@@ -414,7 +414,7 @@ export function useChat(options: ChatOptions = {}) {
     // 检查是否是命令
     if (input.startsWith('/')) {
       const cmd = input.slice(1).split(' ')[0]
-      if (['clear', 'init', 'status', 'help'].includes(cmd)) {
+      if (['clear', 'status', 'help'].includes(cmd)) {
         const result = await executeCommand(cmd)
         if (cmd === 'clear') {
           await loadHistory()

@@ -17,6 +17,9 @@ import (
 
 // handleChat 处理聊天请求：启动后台 Task，然后以 SSE 流订阅事件。
 func (s *Server) handleChat(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req agent.ChatRequest
 	if err := c.BindJSON(&req); err != nil {
 		writeError(c, consts.StatusBadRequest, "无效请求体")
@@ -28,6 +31,10 @@ func (s *Server) handleChat(ctx context.Context, c *app.RequestContext) {
 	}
 
 	task := s.app.StartTask(req)
+	if task == nil {
+		writeError(c, consts.StatusConflict, "尚未选择书籍工作区，请先在书籍管理页选择或创建书籍")
+		return
+	}
 	log.Printf("[agent-sse] attach new chat task_id=%s", task.ID())
 	streamTask(c, task)
 }

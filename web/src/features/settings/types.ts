@@ -1,3 +1,8 @@
+export interface StyleRule {
+  scene: string
+  styles: string[]
+}
+
 export interface Settings {
   openai_api_key?: string
   openai_base_url?: string
@@ -6,9 +11,11 @@ export interface Settings {
   auto_save_enabled?: boolean | null
   auto_save_interval_ms?: number | null
   chapter_filename_format?: string
+  max_open_tabs?: number | null
   max_iteration?: number | null
   model_max_retries?: number | null
   plan_mode_default?: boolean | null
+  style_rules?: StyleRule[] | null
 }
 
 export interface SettingsPaths {

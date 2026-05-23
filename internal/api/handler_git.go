@@ -13,6 +13,9 @@ import (
 
 // handleGitStatus GET /api/git/status — 返回当前书籍 Git 状态。
 func (s *Server) handleGitStatus(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	status, err := s.app.GitStatus(ctx)
 	if err != nil {
 		writeGitError(c, err)
@@ -23,6 +26,9 @@ func (s *Server) handleGitStatus(ctx context.Context, c *app.RequestContext) {
 
 // handleGitHistory GET /api/git/history?limit=20 — 返回最近提交历史。
 func (s *Server) handleGitHistory(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	limit := 20
 	if raw := c.Query("limit"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil {
@@ -39,6 +45,9 @@ func (s *Server) handleGitHistory(ctx context.Context, c *app.RequestContext) {
 
 // handleGitDiff GET /api/git/diff?path=optional — 返回当前工作区 diff。
 func (s *Server) handleGitDiff(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	output, err := s.app.GitDiff(ctx, c.Query("path"))
 	if err != nil {
 		writeGitError(c, err)
@@ -49,6 +58,9 @@ func (s *Server) handleGitDiff(ctx context.Context, c *app.RequestContext) {
 
 // handleGitInit POST /api/git/init — 初始化当前书籍 Git 仓库。
 func (s *Server) handleGitInit(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	result, err := s.app.InitGit(ctx)
 	if err != nil {
 		writeGitError(c, err)
@@ -59,6 +71,9 @@ func (s *Server) handleGitInit(ctx context.Context, c *app.RequestContext) {
 
 // handleGitCommit POST /api/git/commit — 创建书籍版本。
 func (s *Server) handleGitCommit(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Message string `json:"message"`
 	}
@@ -77,6 +92,9 @@ func (s *Server) handleGitCommit(ctx context.Context, c *app.RequestContext) {
 
 // handleGitRollback POST /api/git/rollback — 回滚整本书到指定版本。
 func (s *Server) handleGitRollback(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Hash string `json:"hash"`
 	}
@@ -95,6 +113,9 @@ func (s *Server) handleGitRollback(ctx context.Context, c *app.RequestContext) {
 
 // handleGitStash POST /api/git/stash — 暂存当前未提交内容。
 func (s *Server) handleGitStash(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	result, err := s.app.StashGitChanges(ctx)
 	if err != nil {
 		writeGitError(c, err)
@@ -105,6 +126,9 @@ func (s *Server) handleGitStash(ctx context.Context, c *app.RequestContext) {
 
 // handleGitStashPop POST /api/git/stash/pop — 恢复最近一次暂存内容。
 func (s *Server) handleGitStashPop(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	result, err := s.app.PopGitStash(ctx)
 	if err != nil {
 		writeGitError(c, err)
@@ -115,6 +139,9 @@ func (s *Server) handleGitStashPop(ctx context.Context, c *app.RequestContext) {
 
 // handleGitCommand POST /api/git/command — 执行受限 Git 命令。
 func (s *Server) handleGitCommand(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Command string `json:"command"`
 	}

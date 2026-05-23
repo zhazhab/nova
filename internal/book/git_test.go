@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -318,6 +319,86 @@ func TestGitCommandRequiresInitializedRepo(t *testing.T) {
 	_, err := service.RunCommand(ctx, "status")
 	if !errors.Is(err, ErrGitNotInit) {
 		t.Fatalf("未初始化仓库应返回 ErrGitNotInit: %v", err)
+	}
+}
+
+func TestAutoCommitSkipsWhenNotInitialized(t *testing.T) {
+	service, ctx := newTestGitService(t)
+	result, err := service.AutoCommit(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Skipped || result.Reason != "仓库未初始化" {
+		t.Fatalf("未初始化仓库应跳过 commit: %#v", result)
+	}
+}
+
+func TestAutoCommitSkipsWhenClean(t *testing.T) {
+	service, ctx := newTestGitService(t)
+	if _, err := service.RunCommand(ctx, "init"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.AutoCommit(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Skipped || result.Reason != "工作区干净" {
+		t.Fatalf("干净工作区应跳过 commit: %#v", result)
+	}
+}
+
+func TestAutoCommitSkipsWhenBelowThreshold(t *testing.T) {
+	service, ctx := newTestGitService(t)
+	if _, err := service.RunCommand(ctx, "init"); err != nil {
+		t.Fatal(err)
+	}
+	// 仅 1 行 untracked 文件，阈值 5 -> 跳过
+	writeFile(t, service.workspace, "chapters/ch01.md", "一行")
+	result, err := service.AutoCommit(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Skipped {
+		t.Fatalf("低于阈值应跳过 commit: %#v", result)
+	}
+	if result.Lines == 0 {
+		t.Fatalf("跳过结果应包含已计算的行数: %#v", result)
+	}
+}
+
+func TestAutoCommitCommitsWhenAboveThreshold(t *testing.T) {
+	service, ctx := newTestGitService(t)
+	if _, err := service.RunCommand(ctx, "init"); err != nil {
+		t.Fatal(err)
+	}
+	// untracked 文件 6 行，阈值 5 -> 应触发提交
+	content := strings.Repeat("一行\n", 6)
+	writeFile(t, service.workspace, "chapters/ch01.md", content)
+
+	result, err := service.AutoCommit(ctx, 5)
+	if err != nil {
+		t.Fatalf("AutoCommit 失败: %v", err)
+	}
+	if result.Skipped {
+		t.Fatalf("达到阈值应执行 commit: %#v", result)
+	}
+	if result.Commit == "" {
+		t.Fatalf("commit 短哈希应非空: %#v", result)
+	}
+
+	status, err := service.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Clean {
+		t.Fatalf("AutoCommit 后工作区应干净: %#v", status)
+	}
+	history, err := service.History(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || !strings.HasPrefix(history[0].Subject, "Nova 自动快照：对话前") {
+		t.Fatalf("自动 commit 信息不符合预期: %#v", history)
 	}
 }
 

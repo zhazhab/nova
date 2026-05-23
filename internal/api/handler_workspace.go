@@ -11,6 +11,10 @@ import (
 
 // handleWorkspaceTree GET /api/workspace/tree — 递归扫描 workspace 目录返回文件树。
 func (s *Server) handleWorkspaceTree(ctx context.Context, c *app.RequestContext) {
+	if !s.app.HasWorkspace() {
+		writeJSON(c, consts.StatusOK, []any{})
+		return
+	}
 	tree, err := s.app.BookService().Tree()
 	if err != nil {
 		writeError(c, consts.StatusInternalServerError, "扫描目录失败: "+err.Error())
@@ -21,6 +25,9 @@ func (s *Server) handleWorkspaceTree(ctx context.Context, c *app.RequestContext)
 
 // handleWorkspaceFile GET /api/workspace/file?path=xxx — 读取文件内容。
 func (s *Server) handleWorkspaceFile(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	relPath := c.Query("path")
 	if relPath == "" {
 		writeError(c, consts.StatusBadRequest, "缺少 path 参数")
@@ -40,6 +47,9 @@ func (s *Server) handleWorkspaceFile(ctx context.Context, c *app.RequestContext)
 
 // handleWorkspaceFileWrite POST /api/workspace/file — 写入文件内容。
 func (s *Server) handleWorkspaceFileWrite(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
@@ -61,6 +71,9 @@ func (s *Server) handleWorkspaceFileWrite(ctx context.Context, c *app.RequestCon
 
 // handleWorkspaceCreate POST /api/workspace/create — 新建文件或目录。
 func (s *Server) handleWorkspaceCreate(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Path    string `json:"path"`
 		Type    string `json:"type"`
@@ -84,6 +97,9 @@ func (s *Server) handleWorkspaceCreate(ctx context.Context, c *app.RequestContex
 
 // handleWorkspaceDelete POST /api/workspace/delete — 删除文件或目录。
 func (s *Server) handleWorkspaceDelete(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -101,6 +117,9 @@ func (s *Server) handleWorkspaceDelete(ctx context.Context, c *app.RequestContex
 
 // handleWorkspaceRename POST /api/workspace/rename — 重命名同目录下的文件或目录。
 func (s *Server) handleWorkspaceRename(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		Path    string `json:"path"`
 		NewName string `json:"new_name"`
@@ -124,6 +143,9 @@ func (s *Server) handleWorkspaceRename(ctx context.Context, c *app.RequestContex
 
 // handleWorkspaceCopy POST /api/workspace/copy — 复制文件或目录。
 func (s *Server) handleWorkspaceCopy(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		From string `json:"from"`
 		To   string `json:"to"`
@@ -146,6 +168,9 @@ func (s *Server) handleWorkspaceCopy(ctx context.Context, c *app.RequestContext)
 
 // handleWorkspaceMove POST /api/workspace/move — 移动文件或目录。
 func (s *Server) handleWorkspaceMove(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
 	var req struct {
 		From string `json:"from"`
 		To   string `json:"to"`

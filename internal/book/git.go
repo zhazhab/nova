@@ -16,6 +16,8 @@ import (
 const (
 	gitCommandTimeout = 10 * time.Second
 	gitOutputLimit    = 200 * 1024
+	// DefaultAutoCommitLineThreshold 是「对话前自动 commit」默认触发阈值（add+del 行数）。
+	DefaultAutoCommitLineThreshold = 50
 )
 
 var (
@@ -183,6 +185,118 @@ func (s *GitService) CreateVersion(ctx context.Context, message string) (GitComm
 		result.Status = &status
 	}
 	return result, nil
+}
+
+// AutoCommit 是「对话前自动提交」入口：仓库未初始化或工作区干净则跳过；
+// 当未提交变更累计行数 ≥ threshold 时执行一次 add -A + commit，并在返回值中
+// 用 Skipped 标记是否真的提交了。threshold ≤ 0 时使用 DefaultAutoCommitLineThreshold。
+type AutoCommitResult struct {
+	Skipped bool   // true 表示未提交（仓库未初始化 / 工作区干净 / 行数不足阈值）
+	Reason  string // Skipped=true 时给出原因
+	Lines   int    // 此次累计的 add+del 行数
+	Commit  string // 实际提交的短哈希（Skipped=false 时填充）
+}
+
+func (s *GitService) AutoCommit(ctx context.Context, threshold int) (AutoCommitResult, error) {
+	if threshold <= 0 {
+		threshold = DefaultAutoCommitLineThreshold
+	}
+	if err := ensureGitInstalled(); err != nil {
+		return AutoCommitResult{}, err
+	}
+	if !s.initialized() {
+		return AutoCommitResult{Skipped: true, Reason: "仓库未初始化"}, nil
+	}
+	status, err := s.Status(ctx)
+	if err != nil {
+		return AutoCommitResult{}, err
+	}
+	if status.Clean {
+		return AutoCommitResult{Skipped: true, Reason: "工作区干净"}, nil
+	}
+
+	lines, err := s.pendingChangeLines(ctx)
+	if err != nil {
+		return AutoCommitResult{}, err
+	}
+	if lines < threshold {
+		return AutoCommitResult{Skipped: true, Reason: fmt.Sprintf("变更 %d 行 < 阈值 %d", lines, threshold), Lines: lines}, nil
+	}
+
+	message := fmt.Sprintf("Nova 自动快照：对话前 %s（%d 行变更）", time.Now().Format("2006-01-02 15:04:05"), lines)
+	if _, err := s.runGit(ctx, "add", "-A"); err != nil {
+		return AutoCommitResult{}, err
+	}
+	if _, err := s.runGit(ctx, "commit", "-m", message); err != nil {
+		return AutoCommitResult{}, err
+	}
+	short, err := s.runGit(ctx, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return AutoCommitResult{Lines: lines}, nil
+	}
+	return AutoCommitResult{Lines: lines, Commit: strings.TrimSpace(short)}, nil
+}
+
+// pendingChangeLines 计算当前未提交（含 staged、unstaged、untracked）的累计 add+del 行数。
+func (s *GitService) pendingChangeLines(ctx context.Context) (int, error) {
+	total := 0
+	tracked, err := s.runGit(ctx, "diff", "HEAD", "--numstat")
+	if err != nil {
+		// 仓库尚无 commit 时 HEAD 不存在；退化为对所有已暂存 + 未暂存的统计
+		tracked, err = s.runGit(ctx, "diff", "--numstat")
+		if err != nil {
+			return 0, err
+		}
+	}
+	total += sumNumstat(tracked)
+
+	// untracked 文件不会出现在 git diff 中，单独按整文件行数累计。
+	untrackedOut, err := s.runGit(ctx, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return total, nil
+	}
+	for _, name := range strings.Split(strings.TrimSpace(untrackedOut), "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		path := filepath.Join(s.workspace, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		total += countLines(data)
+	}
+	return total, nil
+}
+
+func sumNumstat(output string) int {
+	total := 0
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		add, err1 := strconv.Atoi(fields[0])
+		del, err2 := strconv.Atoi(fields[1])
+		if err1 != nil || err2 != nil {
+			// 二进制文件 numstat 显示为 "-"，忽略。
+			continue
+		}
+		total += add + del
+	}
+	return total
+}
+
+func countLines(data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	lines := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
+		lines++
+	}
+	return lines
 }
 
 // Rollback 将整本书回滚到指定 commit。回滚前要求工作区干净。

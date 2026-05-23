@@ -123,6 +123,40 @@ func TestAppendPlanModeInstructionForbidsWriteTools(t *testing.T) {
 	assertContains(t, got, "用户需求：\n重构章节")
 }
 
+func TestAppendContextBoundaryInstructionEmphasizesCurrentRequest(t *testing.T) {
+	got := appendContextBoundaryInstruction("帮我写第三章")
+
+	assertContains(t, got, "[上下文边界]")
+	assertContains(t, got, "当前用户请求是“这次要做什么”")
+	assertContains(t, got, "已确认的小说状态")
+	assertContains(t, got, "背景是什么")
+	assertContains(t, got, "历史对话只能辅助理解")
+	assertContains(t, got, "以当前请求为准")
+	assertContains(t, got, "本轮请求：\n帮我写第三章")
+}
+
+func TestAppendStyleRulesHintEmitsSceneAndStyles(t *testing.T) {
+	got := appendStyleRulesHint("续写第三章", []StyleRule{
+		{Scene: "激烈打斗", Styles: []string{"古龙.md", "番茄.txt"}},
+		{Scene: "日常对话", Styles: []string{"温吞.md"}},
+		{Scene: "", Styles: []string{"无效.md"}},          // 应被跳过
+		{Scene: "空风格", Styles: []string{"", " "}},      // 空文件名应被跳过
+	})
+
+	assertContains(t, got, "续写第三章")
+	assertContains(t, got, "[场景化默认风格规则]")
+	assertContains(t, got, "场景：激烈打斗")
+	assertContains(t, got, "古龙.md")
+	assertContains(t, got, "番茄.txt")
+	assertContains(t, got, "场景：日常对话")
+	assertContains(t, got, "温吞.md")
+	assertContains(t, got, "选出最贴近的场景")
+	assertContains(t, got, "完全忽略以上规则")
+	if strings.Contains(got, "无效.md") {
+		t.Fatalf("空 scene 的规则应被跳过，但仍包含 无效.md：\n%s", got)
+	}
+}
+
 func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !strings.Contains(got, want) {
