@@ -94,6 +94,67 @@ func TestSnapshotAppliesTurnAndStateDelta(t *testing.T) {
 	}
 }
 
+func TestCreateAndSwitchBranch(t *testing.T) {
+	store := NewStore(t.TempDir())
+	story, err := store.CreateStory(CreateStoryRequest{Title: "分支故事", StoryTellerID: "classic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := store.AppendTurn(story.ID, AppendTurnRequest{BranchID: "main", User: "向左走", Narrative: "你走向左侧长廊。"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch, err := store.CreateBranch(story.ID, CreateBranchRequest{
+		ParentEventID: turn.ID,
+		Title:         "改向右走",
+	})
+	if err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+	if branch.ID == "" || branch.From != "main" || branch.Head != turn.ID {
+		t.Fatalf("unexpected branch: %#v", branch)
+	}
+	if err := store.SwitchBranch(story.ID, branch.ID); err != nil {
+		t.Fatalf("SwitchBranch failed: %v", err)
+	}
+	snapshot, err := store.Snapshot(story.ID, branch.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.BranchID != branch.ID || len(snapshot.Turns) != 1 {
+		t.Fatalf("branch snapshot should inherit parent turn: %#v", snapshot)
+	}
+}
+
+func TestUpdateAndDeleteStory(t *testing.T) {
+	root := t.TempDir()
+	store := NewStore(root)
+	story, err := store.CreateStory(CreateStoryRequest{Title: "旧标题", StoryTellerID: "classic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpdateStory(story.ID, UpdateStoryRequest{Title: "新标题", StoryTellerID: "grimdark"})
+	if err != nil {
+		t.Fatalf("UpdateStory failed: %v", err)
+	}
+	if updated.Title != "新标题" || updated.StoryTellerID != "grimdark" {
+		t.Fatalf("unexpected updated story: %#v", updated)
+	}
+	if err := store.DeleteStory(story.ID); err != nil {
+		t.Fatalf("DeleteStory failed: %v", err)
+	}
+	index, err := store.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.CurrentStoryID != "" || len(index.Stories) != 0 {
+		t.Fatalf("story should be removed from index: %#v", index)
+	}
+	if _, err := os.Stat(filepath.Join(root, "interactive", "story", "story-"+story.ID+".jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("story file should be removed, err=%v", err)
+	}
+}
+
 func assertContains(t *testing.T, got, want string) {
 	t.Helper()
 	if !contains(got, want) {

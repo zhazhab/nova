@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -52,6 +53,51 @@ func TestInteractiveStoriesAndTellersAPI(t *testing.T) {
 	decodeResponse(t, snapshotResp.Body.Bytes(), &snapshot)
 	if snapshot.StoryID != created.ID || snapshot.BranchID != "main" || len(snapshot.Turns) != 0 {
 		t.Fatalf("snapshot mismatch: %#v", snapshot)
+	}
+
+	chatResp := performJSONRequest(t, server, http.MethodPost, "/api/interactive/chat", map[string]string{
+		"mode":     "story",
+		"story_id": created.ID,
+		"message":  "我推开酒馆的门",
+	})
+	if chatResp.Code != http.StatusOK {
+		t.Fatalf("chat status = %d body=%s", chatResp.Code, chatResp.Body.String())
+	}
+	if !strings.Contains(chatResp.Body.String(), "event: chunk") || !strings.Contains(chatResp.Body.String(), "event: done") {
+		t.Fatalf("chat should stream chunk and done events: %s", chatResp.Body.String())
+	}
+	snapshotResp = performJSONRequest(t, server, http.MethodGet, "/api/interactive/stories/"+created.ID+"/snapshot", nil)
+	decodeResponse(t, snapshotResp.Body.Bytes(), &snapshot)
+	if len(snapshot.Turns) != 1 {
+		t.Fatalf("chat should persist one turn: %#v", snapshot)
+	}
+
+	branchResp := performJSONRequest(t, server, http.MethodPost, "/api/interactive/stories/"+created.ID+"/branches", map[string]string{
+		"parent_event_id": snapshot.Turns[0].(map[string]any)["id"].(string),
+		"title":           "换条路走",
+	})
+	if branchResp.Code != http.StatusOK {
+		t.Fatalf("branch status = %d body=%s", branchResp.Code, branchResp.Body.String())
+	}
+	var branch struct {
+		ID string `json:"id"`
+	}
+	decodeResponse(t, branchResp.Body.Bytes(), &branch)
+	if branch.ID == "" {
+		t.Fatalf("branch id should not be empty: %#v", branch)
+	}
+
+	patchResp := performJSONRequest(t, server, http.MethodPatch, "/api/interactive/stories/"+created.ID, map[string]string{
+		"title":           "新标题",
+		"story_teller_id": "grimdark",
+	})
+	if patchResp.Code != http.StatusOK {
+		t.Fatalf("patch status = %d body=%s", patchResp.Code, patchResp.Body.String())
+	}
+
+	deleteResp := performJSONRequest(t, server, http.MethodDelete, "/api/interactive/stories/"+created.ID, nil)
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", deleteResp.Code, deleteResp.Body.String())
 	}
 
 	tellersResp := performJSONRequest(t, server, http.MethodGet, "/api/interactive/tellers", nil)

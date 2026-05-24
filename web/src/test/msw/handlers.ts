@@ -35,6 +35,11 @@ export const handlers = [
     message_count: 0,
   })),
   http.get('/api/chat/active', () => HttpResponse.json({ active: false })),
+  http.get('/api/interactive/stories', () => HttpResponse.json({ current_story_id: 'st_1', stories: [{ id: 'st_1', title: '末日开端', origin: '', story_teller_id: 'classic', created_at: '', updated_at: '', branches: 1, events: 0 }] })),
+  http.get('/api/interactive/stories/:id/snapshot', () => HttpResponse.json({ story_id: 'st_1', branch_id: 'main', turns: [], state: { on_stage: [], characters: {}, events: [] } })),
+  http.get('/api/interactive/stories/:id/branches', () => HttpResponse.json({ branches: [{ id: 'main', head: '', created_at: '', current: true }] })),
+  http.get('/api/interactive/tellers', () => HttpResponse.json({ tellers: [{ id: 'classic', name: '经典叙事者', description: '平衡叙事', random_event_rate: 0.15, tags: ['通用'], custom: false }] })),
+  http.get('/api/workspace/file', () => HttpResponse.json({ path: 'setting/characters.md', content: '# Characters' })),
   http.get('/api/styles', () => HttpResponse.json({ styles: ['古龙.md', '番茄.txt'] })),
   http.post('/api/command', async ({ request }) => {
     const body = await request.json() as { command?: string }

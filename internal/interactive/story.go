@@ -33,21 +33,31 @@ func (s *Store) Root() string {
 }
 
 type CreateStoryRequest struct {
-	Title         string
-	Origin        string
-	StoryTellerID string
+	Title         string `json:"title"`
+	Origin        string `json:"origin"`
+	StoryTellerID string `json:"story_teller_id"`
 }
 
 type AppendTurnRequest struct {
-	BranchID  string
-	User      string
-	Narrative string
+	BranchID  string `json:"branch_id"`
+	User      string `json:"user"`
+	Narrative string `json:"narrative"`
 }
 
 type AppendStateDeltaRequest struct {
-	ParentID string
-	BranchID string
-	Ops      []StateOp
+	ParentID string    `json:"parent_id"`
+	BranchID string    `json:"branch_id"`
+	Ops      []StateOp `json:"ops"`
+}
+
+type UpdateStoryRequest struct {
+	Title         string `json:"title"`
+	StoryTellerID string `json:"story_teller_id"`
+}
+
+type CreateBranchRequest struct {
+	ParentEventID string `json:"parent_event_id"`
+	Title         string `json:"title"`
 }
 
 type Index struct {
@@ -72,6 +82,16 @@ type BranchMeta struct {
 	From      string `json:"from,omitempty"`
 	FromEvent string `json:"from_event,omitempty"`
 	Title     string `json:"title,omitempty"`
+}
+
+type BranchSummary struct {
+	ID        string `json:"id"`
+	Head      string `json:"head"`
+	From      string `json:"from,omitempty"`
+	FromEvent string `json:"from_event,omitempty"`
+	Title     string `json:"title,omitempty"`
+	CreatedAt string `json:"created_at"`
+	Current   bool   `json:"current"`
 }
 
 type StoryMeta struct {
@@ -114,6 +134,17 @@ type StateDeltaEvent struct {
 	BranchID string    `json:"branch_id"`
 	Ts       string    `json:"ts"`
 	Ops      []StateOp `json:"ops"`
+}
+
+type BranchEvent struct {
+	V        int    `json:"v"`
+	Type     string `json:"type"`
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id"`
+	BranchID string `json:"branch_id"`
+	From     string `json:"from"`
+	Ts       string `json:"ts"`
+	Title    string `json:"title"`
 }
 
 type StateOp struct {
@@ -187,6 +218,76 @@ func (s *Store) CreateStory(req CreateStoryRequest) (StorySummary, error) {
 		return StorySummary{}, err
 	}
 	return story, nil
+}
+
+func (s *Store) UpdateStory(storyID string, req UpdateStoryRequest) (StorySummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	meta, lines, err := s.readStoryLocked(storyID)
+	if err != nil {
+		return StorySummary{}, err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if title := strings.TrimSpace(req.Title); title != "" {
+		meta.Title = title
+	}
+	if tellerID := strings.TrimSpace(req.StoryTellerID); tellerID != "" {
+		meta.StoryTellerID = tellerID
+	}
+	meta.UpdatedAt = now
+	if err := s.rewriteStoryLocked(storyID, meta, lines); err != nil {
+		return StorySummary{}, err
+	}
+	index, err := s.readIndexLocked()
+	if err != nil {
+		return StorySummary{}, err
+	}
+	for i := range index.Stories {
+		if index.Stories[i].ID == storyID {
+			index.Stories[i].Title = meta.Title
+			index.Stories[i].StoryTellerID = meta.StoryTellerID
+			index.Stories[i].UpdatedAt = now
+			if err := s.writeIndexLocked(index); err != nil {
+				return StorySummary{}, err
+			}
+			return index.Stories[i], nil
+		}
+	}
+	return StorySummary{}, fmt.Errorf("故事不存在: %s", storyID)
+}
+
+func (s *Store) DeleteStory(storyID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	index, err := s.readIndexLocked()
+	if err != nil {
+		return err
+	}
+	next := index.Stories[:0]
+	removed := false
+	for _, story := range index.Stories {
+		if story.ID == storyID {
+			removed = true
+			continue
+		}
+		next = append(next, story)
+	}
+	if !removed {
+		return fmt.Errorf("故事不存在: %s", storyID)
+	}
+	index.Stories = next
+	if index.CurrentStoryID == storyID {
+		index.CurrentStoryID = ""
+		if len(index.Stories) > 0 {
+			index.CurrentStoryID = index.Stories[0].ID
+		}
+	}
+	if err := os.Remove(s.storyPath(storyID)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return s.writeIndexLocked(index)
 }
 
 func (s *Store) AppendTurn(storyID string, req AppendTurnRequest) (TurnEvent, error) {
@@ -272,6 +373,95 @@ func (s *Store) AppendStateDelta(storyID string, req AppendStateDeltaRequest) (S
 	return event, nil
 }
 
+func (s *Store) CreateBranch(storyID string, req CreateBranchRequest) (BranchSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	meta, lines, err := s.readStoryLocked(storyID)
+	if err != nil {
+		return BranchSummary{}, err
+	}
+	parentID := strings.TrimSpace(req.ParentEventID)
+	if parentID == "" {
+		return BranchSummary{}, fmt.Errorf("父事件不能为空")
+	}
+	fromBranch, ok := findEventBranch(lines, parentID)
+	if !ok {
+		return BranchSummary{}, fmt.Errorf("父事件不存在: %s", parentID)
+	}
+	branchID := "br_" + strings.TrimPrefix(newID(""), "_")
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		title = "新分支"
+	}
+	meta.CurrentBranch = branchID
+	meta.Branches[branchID] = BranchMeta{
+		Head:      parentID,
+		CreatedAt: now,
+		From:      fromBranch,
+		FromEvent: parentID,
+		Title:     title,
+	}
+	meta.UpdatedAt = now
+	event := BranchEvent{
+		V:        schemaVersion,
+		Type:     "branch",
+		ID:       newID("ev"),
+		ParentID: parentID,
+		BranchID: branchID,
+		From:     fromBranch,
+		Ts:       now,
+		Title:    title,
+	}
+	if err := s.rewriteStoryLocked(storyID, meta, lines, event); err != nil {
+		return BranchSummary{}, err
+	}
+	if err := s.updateIndexBranchesLocked(storyID, len(meta.Branches), now, 1); err != nil {
+		return BranchSummary{}, err
+	}
+	return BranchSummary{ID: branchID, Head: parentID, From: fromBranch, FromEvent: parentID, Title: title, CreatedAt: now, Current: true}, nil
+}
+
+func (s *Store) SwitchBranch(storyID, branchID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	meta, lines, err := s.readStoryLocked(storyID)
+	if err != nil {
+		return err
+	}
+	if _, ok := meta.Branches[branchID]; !ok {
+		return fmt.Errorf("分支不存在: %s", branchID)
+	}
+	meta.CurrentBranch = branchID
+	meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return s.rewriteStoryLocked(storyID, meta, lines)
+}
+
+func (s *Store) Branches(storyID string) ([]BranchSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	meta, _, err := s.readStoryLocked(storyID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]BranchSummary, 0, len(meta.Branches))
+	for id, branch := range meta.Branches {
+		result = append(result, BranchSummary{
+			ID:        id,
+			Head:      branch.Head,
+			From:      branch.From,
+			FromEvent: branch.FromEvent,
+			Title:     branch.Title,
+			CreatedAt: branch.CreatedAt,
+			Current:   id == meta.CurrentBranch,
+		})
+	}
+	return result, nil
+}
+
 func (s *Store) Snapshot(storyID, branchID string) (Snapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -289,10 +479,17 @@ func (s *Store) Snapshot(storyID, branchID string) (Snapshot, error) {
 		"events":     []any{},
 	}
 	snapshot := Snapshot{StoryID: storyID, BranchID: branchID, State: state}
+	allowedBranches := map[string]bool{branchID: true}
+	if branchID != "main" {
+		branch := meta.Branches[branchID]
+		if branch.From != "" {
+			allowedBranches[branch.From] = true
+		}
+	}
 	for _, raw := range lines {
 		eventType, _ := raw["type"].(string)
 		eventBranch, _ := raw["branch_id"].(string)
-		if eventBranch != branchID {
+		if !allowedBranches[eventBranch] {
 			continue
 		}
 		switch eventType {
@@ -366,6 +563,34 @@ func (s *Store) touchIndexLocked(storyID, updatedAt string, eventDelta int) erro
 		}
 	}
 	return fmt.Errorf("故事不存在: %s", storyID)
+}
+
+func (s *Store) updateIndexBranchesLocked(storyID string, branches int, updatedAt string, eventDelta int) error {
+	index, err := s.readIndexLocked()
+	if err != nil {
+		return err
+	}
+	for i := range index.Stories {
+		if index.Stories[i].ID == storyID {
+			index.Stories[i].Branches = branches
+			index.Stories[i].UpdatedAt = updatedAt
+			index.Stories[i].Events += eventDelta
+			return s.writeIndexLocked(index)
+		}
+	}
+	return fmt.Errorf("故事不存在: %s", storyID)
+}
+
+func findEventBranch(lines []map[string]any, eventID string) (string, bool) {
+	for _, raw := range lines {
+		id, _ := raw["id"].(string)
+		if id != eventID {
+			continue
+		}
+		branchID, _ := raw["branch_id"].(string)
+		return branchID, branchID != ""
+	}
+	return "", false
 }
 
 func (s *Store) readStoryLocked(storyID string) (StoryMeta, []map[string]any, error) {

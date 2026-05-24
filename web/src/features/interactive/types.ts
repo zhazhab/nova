@@ -1,0 +1,59 @@
+import type { SSEEvent } from '@/lib/api'
+
+export type InteractiveSubmode = 'story' | 'setting'
+
+export interface StorySummary {
+  id: string
+  title: string
+  origin: string
+  story_teller_id: string
+  created_at: string
+  updated_at: string
+  branches: number
+  events: number
+}
+
+export interface StoryIndex {
+  current_story_id: string
+  stories: StorySummary[]
+}
+
+export interface Teller {
+  id: string
+  name: string
+  description: string
+  random_event_rate: number
+  tags: string[]
+  prompt?: string
+  custom: boolean
+  invalid?: boolean
+  error?: string
+}
+
+export interface TurnEvent {
+  id: string
+  parent_id: string | null
+  branch_id: string
+  ts: string
+  user: string
+  narrative: string
+}
+
+export interface Snapshot {
+  story_id: string
+  branch_id: string
+  turns: TurnEvent[]
+  state: Record<string, unknown>
+}
+
+export interface BranchSummary {
+  id: string
+  head: string
+  from?: string
+  from_event?: string
+  title?: string
+  created_at: string
+  current: boolean
+}
+
+export type InteractiveSSEEvent = SSEEvent

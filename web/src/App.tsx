@@ -8,6 +8,7 @@ import { WorkspaceSelector } from '@/components/Header/WorkspaceSelector'
 import { GitPanel } from '@/components/Git/GitPanel'
 import { HomeView } from '@/components/Home/HomeView'
 import { SettingsView } from '@/features/settings/SettingsView'
+import { InteractiveLayout } from '@/features/interactive/components/InteractiveLayout'
 import { fetchSettings } from '@/features/settings/api'
 import { WorkspaceLayout } from '@/components/layout/workspace-layout'
 import { CommandPalette } from '@/components/common/command-palette'
@@ -159,9 +160,11 @@ function App() {
   const rightPanel = useWorkspaceStore((state) => state.rightPanel)
   const bottomPanel = useWorkspaceStore((state) => state.bottomPanel)
   const commandOpen = useWorkspaceStore((state) => state.commandOpen)
+  const mode = useWorkspaceStore((state) => state.mode)
   const setRightPanel = useWorkspaceStore((state) => state.setRightPanel)
   const setBottomPanel = useWorkspaceStore((state) => state.setBottomPanel)
   const setCommandOpen = useWorkspaceStore((state) => state.setCommandOpen)
+  const setMode = useWorkspaceStore((state) => state.setMode)
   const setSelectedChapterId = useWorkspaceStore((state) => state.setSelectedChapterId)
   const aiVisible = rightPanel === 'ai'
   const versionsVisible = rightPanel === 'versions'
@@ -459,6 +462,22 @@ function App() {
         onSwitch={handleWorkspaceSwitch}
         onBooksChange={refreshBooks}
       />
+      <div className="flex h-9 items-center gap-1 border-b border-[#303238] bg-[#202124] px-2">
+        <button
+          type="button"
+          className={`rounded-md px-3 py-1 text-xs ${mode === 'ide' ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'}`}
+          onClick={() => setMode('ide')}
+        >
+          IDE
+        </button>
+        <button
+          type="button"
+          className={`rounded-md px-3 py-1 text-xs ${mode === 'interactive' ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'}`}
+          onClick={() => setMode('interactive')}
+        >
+          Interactive
+        </button>
+      </div>
     </>
   )
 
@@ -599,31 +618,37 @@ function App() {
 
   const main = (
     <main className="flex h-full min-w-0 flex-col border-r border-[#303238] bg-[#1b1c1f]">
-      {tabBar}
-      <div className="flex min-h-0 flex-1 flex-col">
-        {activeTab?.kind === 'home' ? (
-          <HomeView
-            workspace={workspace}
-            books={books}
-            onSwitch={handleWorkspaceSwitch}
-            onBooksChange={refreshBooks}
-          />
-        ) : activeTab?.kind === 'settings' ? (
-          <SettingsView />
-        ) : activeTab?.kind === 'file' ? (
-          <MarkdownEditor
-            fileName={selectedFile}
-            content={fileContent}
-            onSave={handleSaveCurrentFile}
-            onQuoteSelection={addTextSelection}
-            saveSignal={saveSignal}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-[#7f8590]">
-            请从左侧目录树选择文件，或打开「书籍管理」
+      {mode === 'interactive' ? (
+        <InteractiveLayout />
+      ) : (
+        <>
+          {tabBar}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {activeTab?.kind === 'home' ? (
+              <HomeView
+                workspace={workspace}
+                books={books}
+                onSwitch={handleWorkspaceSwitch}
+                onBooksChange={refreshBooks}
+              />
+            ) : activeTab?.kind === 'settings' ? (
+              <SettingsView />
+            ) : activeTab?.kind === 'file' ? (
+              <MarkdownEditor
+                fileName={selectedFile}
+                content={fileContent}
+                onSave={handleSaveCurrentFile}
+                onQuoteSelection={addTextSelection}
+                saveSignal={saveSignal}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-[#7f8590]">
+                请从左侧目录树选择文件，或打开「书籍管理」
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </main>
   )
 
@@ -727,10 +752,10 @@ function App() {
         topBar={topBar}
         activityBar={activityBar}
         sidebar={sidebar}
-        sidebarVisible={projectVisible}
+        sidebarVisible={mode === 'ide' && projectVisible}
         main={main}
-        rightPanel={rightPanelContent}
-        rightPanelVisible={Boolean(rightPanelContent)}
+        rightPanel={mode === 'ide' ? rightPanelContent : null}
+        rightPanelVisible={mode === 'ide' && Boolean(rightPanelContent)}
         bottomPanel={bottomPanelContent}
         bottomPanelVisible={Boolean(bottomPanelContent)}
         statusBar={statusBar}

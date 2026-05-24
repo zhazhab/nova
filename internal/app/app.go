@@ -132,6 +132,33 @@ func (a *App) CreateInteractiveStory(req interactive.CreateStoryRequest) (intera
 	return store.CreateStory(req)
 }
 
+func (a *App) UpdateInteractiveStory(storyID string, req interactive.UpdateStoryRequest) (interactive.StorySummary, error) {
+	a.mu.RLock()
+	store := a.interactive
+	a.mu.RUnlock()
+	if store == nil {
+		return interactive.StorySummary{}, ErrNoWorkspace
+	}
+	return store.UpdateStory(storyID, req)
+}
+
+func (a *App) DeleteInteractiveStory(storyID string) error {
+	a.mu.RLock()
+	store := a.interactive
+	sessionStore := a.sessionStore
+	a.mu.RUnlock()
+	if store == nil {
+		return ErrNoWorkspace
+	}
+	if err := store.DeleteStory(storyID); err != nil {
+		return err
+	}
+	if sessionStore != nil {
+		return sessionStore.DeleteByPrefix("interactive-story-" + storyID + "-")
+	}
+	return nil
+}
+
 func (a *App) InteractiveSnapshot(storyID, branchID string) (interactive.Snapshot, error) {
 	a.mu.RLock()
 	store := a.interactive
@@ -140,6 +167,50 @@ func (a *App) InteractiveSnapshot(storyID, branchID string) (interactive.Snapsho
 		return interactive.Snapshot{}, ErrNoWorkspace
 	}
 	return store.Snapshot(storyID, branchID)
+}
+
+func (a *App) CreateInteractiveBranch(storyID string, req interactive.CreateBranchRequest) (interactive.BranchSummary, error) {
+	a.mu.RLock()
+	store := a.interactive
+	a.mu.RUnlock()
+	if store == nil {
+		return interactive.BranchSummary{}, ErrNoWorkspace
+	}
+	return store.CreateBranch(storyID, req)
+}
+
+func (a *App) SwitchInteractiveBranch(storyID, branchID string) error {
+	a.mu.RLock()
+	store := a.interactive
+	a.mu.RUnlock()
+	if store == nil {
+		return ErrNoWorkspace
+	}
+	return store.SwitchBranch(storyID, branchID)
+}
+
+func (a *App) InteractiveBranches(storyID string) ([]interactive.BranchSummary, error) {
+	a.mu.RLock()
+	store := a.interactive
+	a.mu.RUnlock()
+	if store == nil {
+		return nil, ErrNoWorkspace
+	}
+	return store.Branches(storyID)
+}
+
+func (a *App) AppendInteractiveTurn(storyID, branchID, user, narrative string) (interactive.TurnEvent, error) {
+	a.mu.RLock()
+	store := a.interactive
+	a.mu.RUnlock()
+	if store == nil {
+		return interactive.TurnEvent{}, ErrNoWorkspace
+	}
+	return store.AppendTurn(storyID, interactive.AppendTurnRequest{
+		BranchID:  branchID,
+		User:      user,
+		Narrative: narrative,
+	})
 }
 
 func (a *App) InteractiveTellers() ([]interactive.Teller, error) {
