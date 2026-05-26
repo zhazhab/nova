@@ -13,6 +13,9 @@ interface BranchTimelineProps {
   onSwitchBranch: (branchId: string) => void
   onCreateBranch: (turnId: string, title: string) => void
   onDeleteBranch: (branchId: string) => void
+  expanded?: boolean
+  fill?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }
 
 interface TimelineRow {
@@ -57,7 +60,7 @@ interface GraphLayout {
 }
 
 const COLUMN_WIDTH = 250
-const LANE_HEIGHT = 72
+const LANE_HEIGHT = 66
 const NODE_CARD_WIDTH = 176
 const NODE_DOT_X = 18
 const NODE_CENTER_Y = 21
@@ -75,8 +78,18 @@ const BRANCH_COLORS = [
   { color: '#22c7d6', soft: 'rgba(34,199,214,0.16)' },
 ]
 
-export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBranch, onCreateBranch, onDeleteBranch }: BranchTimelineProps) {
-  const [expanded, setExpanded] = useState(false)
+export function BranchTimeline({
+  snapshot,
+  branches,
+  currentBranchId,
+  onSwitchBranch,
+  onCreateBranch,
+  onDeleteBranch,
+  expanded: controlledExpanded,
+  fill = false,
+  onExpandedChange,
+}: BranchTimelineProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [branchTitle, setBranchTitle] = useState('')
@@ -86,6 +99,12 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
   const selectedNode = graphNodes.find((node) => node.id === selectedNodeId) || null
   const layout = useMemo(() => buildGraphLayout(graphNodes, graphBranches), [graphBranches, graphNodes])
   const emptyBranchCount = graphBranches.filter((branch) => isEmptyBranch(branch, graphNodes)).length
+  const expanded = controlledExpanded ?? internalExpanded
+
+  const setExpanded = (nextExpanded: boolean) => {
+    if (controlledExpanded === undefined) setInternalExpanded(nextExpanded)
+    onExpandedChange?.(nextExpanded)
+  }
 
   const selectNode = (node: PlotNode) => {
     setSelectedNodeId(node.id)
@@ -113,18 +132,18 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
   }
 
   return (
-    <div className={`${expanded ? 'h-[430px]' : 'h-[52px]'} border-t border-[#2f3540] bg-[#14171c] px-4 py-3 transition-[height]`}>
-      <div className="flex items-center justify-between gap-3 text-xs text-[#858b96]">
+    <div className={`${fill ? 'h-full min-h-0' : expanded ? 'h-[min(430px,calc(100vh-96px))] min-h-[320px]' : 'h-[52px]'} border-t border-[#2f3540] bg-[#14171c] px-3 py-3 transition-[height] sm:px-4`}>
+      <div className="flex items-center justify-between gap-2 text-xs text-[#858b96]">
         <button type="button" className="flex items-center gap-1.5 font-medium text-[#c3cad6] hover:text-[#edf2fa]" onClick={() => setExpanded(!expanded)}>
           <GitBranch className="h-3.5 w-3.5 text-[#8b5cf6]" />
           剧情路线图
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
         </button>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-hidden">
           <span className="truncate text-[#737d8d]">{graphNodes.length || snapshot?.turns?.length || 0} 个剧情节点</span>
-          {emptyBranchCount > 0 && <Badge variant="outline" className="border-[#4a3d2f] bg-[#282119] text-[#d5aa72]">{emptyBranchCount} 条空剧情线</Badge>}
+          {emptyBranchCount > 0 && <Badge variant="outline" className="hidden border-[#4a3d2f] bg-[#282119] text-[#d5aa72] sm:inline-flex">{emptyBranchCount} 条空剧情线</Badge>}
           {selectedNode && (
-            <Button variant="outline" size="xs" className="gap-1.5 border-[#3a414d] bg-[#20242b] text-[#c3cbd7] hover:bg-[#252c38]" onClick={openCreateDialog}>
+            <Button variant="outline" size="xs" className="hidden gap-1.5 border-[#3a414d] bg-[#20242b] text-[#c3cbd7] hover:bg-[#252c38] sm:inline-flex" onClick={openCreateDialog}>
               <Plus className="h-3.5 w-3.5" />
               从选中节点创建
             </Button>
@@ -133,10 +152,10 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
       </div>
 
       {expanded && (
-        <div className="mt-3 h-[358px] overflow-hidden rounded-xl border border-[#2d3440] bg-[#11151c] shadow-[0_18px_42px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="flex h-11 items-center justify-between border-b border-[#29313c] bg-[#171c25] px-4">
-            <div className="flex items-center gap-2">
-              <div className="flex overflow-hidden rounded-md border border-[#2f3a49] bg-[#10141c]">
+        <div className="mt-3 flex h-[calc(100%-40px)] min-h-0 flex-col overflow-hidden rounded-lg border border-[#2d3440] bg-[#11151c]/95 shadow-[0_18px_42px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-[#29313c] bg-[#171c25]/95 px-3 backdrop-blur sm:px-4">
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
+              <div className="flex shrink-0 overflow-hidden rounded-md border border-[#2f3a49] bg-[#10141c]">
                 <button type="button" className="flex h-7 w-8 items-center justify-center bg-[#1f3157] text-[#6aa8ff]" aria-label="选择节点">
                   <MousePointer2 className="h-3.5 w-3.5" />
                 </button>
@@ -144,23 +163,23 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
                   <Hand className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <Button size="xs" variant="outline" className="gap-1.5 border-[#354051] bg-[#1a202b] text-[#c4ccd8] hover:bg-[#242b38]" disabled={!selectedNode} onClick={openCreateDialog}>
+              <Button size="xs" variant="outline" className="shrink-0 gap-1.5 border-[#354051] bg-[#1a202b] text-[#c4ccd8] hover:bg-[#242b38]" disabled={!selectedNode} onClick={openCreateDialog}>
                 <Plus className="h-3.5 w-3.5 text-[#d8b35f]" />
                 创建分支
               </Button>
-              <Button size="xs" variant="outline" className="gap-1.5 border-[#3a3036] bg-[#201a20] text-[#d7a1ad] hover:bg-[#302029]" disabled={!layout.rows.some((row) => row.branch && isEmptyBranch(row.branch, graphNodes))}>
+              <Button size="xs" variant="outline" className="hidden shrink-0 gap-1.5 border-[#3a3036] bg-[#201a20] text-[#d7a1ad] hover:bg-[#302029] sm:inline-flex" disabled={!layout.rows.some((row) => row.branch && row.empty)}>
                 <Trash2 className="h-3.5 w-3.5" />
                 删除空分支
               </Button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[#8d96a7]">
+            <div className="hidden shrink-0 items-center gap-2 text-xs text-[#8d96a7] sm:flex">
               <span>100%</span>
               <Badge variant="outline" className="border-[#384150] bg-[#202633] text-[#aeb8c8]">居中</Badge>
             </div>
           </div>
 
-          <div className="grid h-[247px] grid-cols-[210px_minmax(0,1fr)] border-b border-[#29313c]">
-            <aside className="border-r border-[#29313c] bg-[#151a22] p-3">
+          <div className="grid min-h-0 flex-1 grid-cols-1 border-b border-[#29313c] sm:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-[210px_minmax(0,1fr)]">
+            <aside className="hidden min-h-0 overflow-auto border-r border-[#29313c] bg-[#151a22] p-3 sm:block">
               <div className="mb-3 flex items-center justify-between text-sm font-semibold text-[#dde3ed]">
                 章节
                 <Plus className="h-4 w-4 text-[#8c96a6]" />
@@ -190,7 +209,7 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
               </div>
             </aside>
 
-            <div ref={scrollRef} className="overflow-auto bg-[#0f131a] cursor-grab active:cursor-grabbing">
+            <div ref={scrollRef} className="min-h-0 cursor-grab overflow-auto bg-[#0f131a] active:cursor-grabbing">
               <div
                 data-testid="branch-graph-canvas"
                 className="relative min-w-max"
@@ -203,15 +222,6 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
                   </div>
                 ))}
                 <svg className="pointer-events-none absolute inset-0 overflow-visible" width={layout.width} height={layout.height} aria-hidden="true">
-                  <defs>
-                    <filter id="nova-route-glow" x="-20%" y="-120%" width="140%" height="340%">
-                      <feGaussianBlur stdDeviation="2.4" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
-                  </defs>
                   {layout.connections.map((connection) => (
                     <path
                       key={`${connection.from.node.id}-${connection.to.node.id}`}
@@ -222,7 +232,6 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       opacity={0.9}
-                      filter="url(#nova-route-glow)"
                     />
                   ))}
                   {layout.emptyBranches.map((branch) => branch.from ? (
@@ -244,7 +253,7 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
                   <button
                     key={node.id}
                     type="button"
-                    className={`absolute z-10 flex h-[42px] items-center gap-2 rounded-lg border px-3 text-left shadow-[0_12px_26px_rgba(0,0,0,0.25)] backdrop-blur transition ${node.id === selectedNodeId ? 'border-[#f0cf8b] text-[#fff1ce] ring-2 ring-[#f0cf8b]/25' : node.current ? 'border-[#6aa8ff] text-[#eaf4ff]' : 'border-[#3a4656] text-[#c4ccd8] hover:border-[#74849a]'}`}
+                    className={`absolute z-10 flex h-[42px] items-center gap-2 rounded-lg border px-3 text-left shadow-[0_10px_22px_rgba(0,0,0,0.22)] backdrop-blur transition ${node.id === selectedNodeId ? 'border-[#f0cf8b] text-[#fff1ce] ring-2 ring-[#f0cf8b]/25' : node.current ? 'border-[#6aa8ff] text-[#eaf4ff]' : 'border-[#3a4656] text-[#c4ccd8] hover:border-[#74849a]'}`}
                     style={{ left: x, top: y, width: NODE_CARD_WIDTH, background: node.id === selectedNodeId ? 'rgba(64,48,28,0.96)' : colorSoft }}
                     onClick={() => selectNode(node)}
                     title={`${node.title}\n${node.summary}`}
@@ -271,8 +280,8 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
             </div>
           </div>
 
-          <div className="grid h-[70px] grid-cols-[210px_minmax(0,1fr)] bg-[#161b24]">
-            <div className="flex items-center border-r border-[#29313c] px-4 text-xs text-[#818b9b]">
+          <div className="grid min-h-[70px] shrink-0 grid-cols-1 bg-[#161b24] sm:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-[210px_minmax(0,1fr)]">
+            <div className="hidden items-center border-r border-[#29313c] px-4 text-xs text-[#818b9b] sm:flex">
               {selectedNode ? (
                 <div className="min-w-0">
                   <div className="text-[#d6dbe5]">已选节点</div>
@@ -282,7 +291,7 @@ export function BranchTimeline({ snapshot, branches, currentBranchId, onSwitchBr
                 <span>点击节点先选中。</span>
               )}
             </div>
-            <div className="flex min-w-0 items-center gap-3 px-4">
+            <div className="flex min-w-0 items-center gap-3 px-3 sm:px-4">
               <MiniMap layout={layout} />
               {selectedNode && (
                 <Button size="xs" className="shrink-0 gap-1.5 bg-[#6d3fe6] hover:bg-[#7c4bf0]" onClick={openCreateDialog}>
@@ -346,6 +355,7 @@ function MiniMap({ layout }: { layout: GraphLayout }) {
 }
 
 function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLayout {
+  const columnById = buildNodeColumns(nodes)
   const rowsByBranch = new Map<string, TimelineRow>()
   for (const [index, branch] of branches.entries()) {
     const palette = BRANCH_COLORS[index % BRANCH_COLORS.length]
@@ -353,7 +363,7 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
       branchId: branch.id,
       branch,
       nodes: [],
-      startColumn: Math.max(0, branch.from_event ? nodeColumnById(branch.from_event, nodes) + 1 : 0),
+      startColumn: Math.max(0, branch.from_event ? (columnById.get(branch.from_event) ?? 0) + 1 : 0),
       empty: isEmptyBranch(branch, nodes),
       color: palette.color,
       colorSoft: palette.soft,
@@ -368,16 +378,28 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
   }
   const rows = Array.from(rowsByBranch.values()).map((row) => ({
     ...row,
-    nodes: row.nodes.sort((a, b) => nodeColumn(a, nodes) - nodeColumn(b, nodes)),
+    nodes: row.nodes.sort((a, b) => {
+      const columnDiff = (columnById.get(a.id) ?? 0) - (columnById.get(b.id) ?? 0)
+      return columnDiff || a.id.localeCompare(b.id)
+    }),
   }))
+  const displayColumnById = new Map<string, number>()
+  for (const row of rows) {
+    let previousColumn = -1
+    for (const node of row.nodes) {
+      const column = Math.max(columnById.get(node.id) ?? 0, previousColumn + 1)
+      displayColumnById.set(node.id, column)
+      previousColumn = column
+    }
+  }
   let maxColumn = 0
-  for (const node of nodes) maxColumn = Math.max(maxColumn, nodeColumn(node, nodes))
+  for (const node of nodes) maxColumn = Math.max(maxColumn, displayColumnById.get(node.id) ?? 0)
   for (const row of rows) maxColumn = Math.max(maxColumn, row.startColumn)
   const positionedNodes: PositionedNode[] = []
   const nodeById = new Map<string, PositionedNode>()
   rows.forEach((row, rowIndex) => {
     for (const node of row.nodes) {
-      const column = nodeColumn(node, nodes)
+      const column = displayColumnById.get(node.id) ?? 0
       const positioned = {
         node,
         row: rowIndex,
@@ -391,12 +413,24 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
       nodeById.set(node.id, positioned)
     }
   })
-  const connections = positionedNodes.flatMap((positioned) => {
-    if (!positioned.node.parent_id) return []
-    const from = nodeById.get(positioned.node.parent_id)
-    if (!from) return []
-    return [{ from, to: positioned, branchChanged: from.node.branch_id !== positioned.node.branch_id, color: positioned.color }]
-  })
+  const connections: GraphLayout['connections'] = []
+  const connectionKeys = new Set<string>()
+  const addConnection = (from: PositionedNode | undefined, to: PositionedNode | undefined, color: string) => {
+    if (!from || !to) return
+    const key = `${from.node.id}->${to.node.id}`
+    if (connectionKeys.has(key)) return
+    connectionKeys.add(key)
+    connections.push({ from, to, branchChanged: from.node.branch_id !== to.node.branch_id, color })
+  }
+  for (const positioned of positionedNodes) {
+    if (!positioned.node.parent_id) continue
+    addConnection(nodeById.get(positioned.node.parent_id), positioned, positioned.color)
+  }
+  for (const row of rows) {
+    for (let index = 1; index < row.nodes.length; index += 1) {
+      addConnection(nodeById.get(row.nodes[index - 1].id), nodeById.get(row.nodes[index].id), row.color)
+    }
+  }
   const emptyBranches = rows.flatMap((row, rowIndex) => {
     if (!row.branch || !row.empty) return []
     const column = row.startColumn
@@ -432,23 +466,24 @@ function connectionPath(from: Pick<PositionedNode, 'x' | 'y'>, to: Pick<Position
   return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
 }
 
-function nodeColumn(node: PlotNode, nodes: PlotNode[]) {
-  return nodeColumnById(node.id, nodes)
-}
-
-function nodeColumnById(nodeId: string, nodes: PlotNode[]) {
+function buildNodeColumns(nodes: PlotNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]))
-  let column = 0
-  const seen = new Set<string>()
-  for (let id = nodeId; id;) {
-    if (seen.has(id)) break
-    seen.add(id)
-    const node = byId.get(id)
-    if (!node?.parent_id) break
-    column += 1
-    id = node.parent_id
+  const columnById = new Map<string, number>()
+
+  const getColumn = (nodeId: string, path = new Set<string>()): number => {
+    const cached = columnById.get(nodeId)
+    if (cached !== undefined) return cached
+    if (path.has(nodeId)) return 0
+    path.add(nodeId)
+    const node = byId.get(nodeId)
+    const column = node?.parent_id ? getColumn(node.parent_id, path) + 1 : 0
+    path.delete(nodeId)
+    columnById.set(nodeId, column)
+    return column
   }
-  return column
+
+  for (const node of nodes) getColumn(node.id)
+  return columnById
 }
 
 function isEmptyBranch(branch: BranchSummary, nodes: PlotNode[]) {

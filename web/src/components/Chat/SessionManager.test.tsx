@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { MessageList } from './MessageList'
@@ -60,6 +60,42 @@ describe('SessionManager', () => {
 })
 
 describe('MessageList', () => {
+  it('历史消息首次加载后默认滚动到底部', async () => {
+    const { container, rerender } = render(
+      <MessageList
+        isStreaming={false}
+        activityContent=""
+        messages={[]}
+        scrollResetKey="session-a"
+      />,
+    )
+    const scroller = container.firstElementChild as HTMLDivElement
+    let scrollTop = 0
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 1200 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 320 })
+    Object.defineProperty(scroller, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = value
+      },
+    })
+
+    rerender(
+      <MessageList
+        isStreaming={false}
+        activityContent=""
+        messages={[
+          { type: 'message', role: 'user', content: '第一条消息' },
+          { type: 'message', role: 'assistant', content: '最新回复' },
+        ]}
+        scrollResetKey="session-a"
+      />,
+    )
+
+    await waitFor(() => expect(scroller.scrollTop).toBe(1200))
+  })
+
   it('展示 /clear 产生的上下文清理分界且保留前后消息', () => {
     render(
       <MessageList

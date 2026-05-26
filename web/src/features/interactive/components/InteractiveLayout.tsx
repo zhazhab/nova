@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BookOpen, CheckCircle2, Layers3, Lightbulb, PenLine, ScrollText } from 'lucide-react'
+import { Group, Panel, Separator } from 'react-resizable-panels'
+import type { Layout, PanelImperativeHandle, PanelSize } from 'react-resizable-panels'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createInteractiveBranch, createInteractiveStory, deleteInteractiveBranch, deleteInteractiveStory, getInteractiveBranches, getInteractiveSnapshot, getInteractiveStories, getInteractiveTellers, switchInteractiveBranch, updateInteractiveStory } from '../api'
@@ -27,6 +29,9 @@ export function InteractiveLayout({
   } = useInteractiveStore()
   const currentStory = stories.find((story) => story.id === currentStoryId)
   const snapshotStoryIdRef = useRef('')
+  const [timelineExpanded, setTimelineExpanded] = useState(false)
+  const timelinePanelRef = useRef<PanelImperativeHandle | null>(null)
+  const timelineExpandedHeightRef = useRef(360)
 
   useEffect(() => {
     snapshotStoryIdRef.current = snapshot?.story_id || ''
@@ -98,6 +103,21 @@ export function InteractiveLayout({
     await reloadStories()
   }
 
+  const handleTimelineExpandedChange = (nextExpanded: boolean) => {
+    setTimelineExpanded(nextExpanded)
+    window.requestAnimationFrame(() => {
+      if (nextExpanded) {
+        timelinePanelRef.current?.resize(`${Math.max(280, timelineExpandedHeightRef.current)}px`)
+      } else {
+        timelinePanelRef.current?.resize('52px')
+      }
+    })
+  }
+
+  const handleTimelineResize = (size: PanelSize) => {
+    if (timelineExpanded) timelineExpandedHeightRef.current = Math.max(280, size.inPixels)
+  }
+
   const workflow = [
     { label: '灵感', icon: Lightbulb },
     { label: '设定', icon: ScrollText },
@@ -138,13 +158,90 @@ export function InteractiveLayout({
             </TabsList>
           </Tabs>
         </div>
-        <div className="flex min-h-0 flex-1">
-          {leftPanelVisible && <SettingPanel />}
-          <StoryStage storyId={currentStoryId} branchId={currentBranchId} snapshot={snapshot} onDone={reloadSnapshot} />
-          {rightPanelVisible && <SnapshotPanel snapshot={snapshot} />}
-        </div>
-        <BranchTimeline snapshot={snapshot} branches={branches} currentBranchId={currentBranchId} onSwitchBranch={handleSwitchBranch} onCreateBranch={handleCreateBranch} onDeleteBranch={handleDeleteBranch} />
+        <Group
+          id="nova-interactive-main-vertical"
+          defaultLayout={readStoredLayout('nova-interactive-main-vertical')}
+          onLayoutChanged={(layout) => storeLayout('nova-interactive-main-vertical', layout)}
+          orientation="vertical"
+          className="min-h-0 flex-1"
+        >
+          <Panel id="stage-area" minSize="240px" className="min-h-0">
+            <Group
+              id="nova-interactive-horizontal"
+              defaultLayout={readStoredLayout('nova-interactive-horizontal')}
+              onLayoutChanged={(layout) => storeLayout('nova-interactive-horizontal', layout)}
+              orientation="horizontal"
+              className="min-h-0"
+            >
+              {leftPanelVisible && (
+                <>
+                  <Panel id="setting" defaultSize="280px" minSize="180px" maxSize="45%" className="min-w-0">
+                    <SettingPanel />
+                  </Panel>
+                  <InteractiveResizeHandle direction="vertical" label="调整互动资料库宽度" />
+                </>
+              )}
+              <Panel id="story-stage" minSize="240px" className="min-w-0">
+                <StoryStage storyId={currentStoryId} branchId={currentBranchId} snapshot={snapshot} onDone={reloadSnapshot} />
+              </Panel>
+              {rightPanelVisible && (
+                <>
+                  <InteractiveResizeHandle direction="vertical" label="调整场景记忆宽度" />
+                  <Panel id="snapshot" defaultSize="320px" minSize="180px" maxSize="45%" className="min-w-0">
+                    <SnapshotPanel snapshot={snapshot} />
+                  </Panel>
+                </>
+              )}
+            </Group>
+          </Panel>
+          <InteractiveResizeHandle direction="horizontal" label="调整剧情路线图高度" />
+          <Panel
+            id="branch-timeline"
+            defaultSize="52px"
+            minSize={timelineExpanded ? '180px' : '52px'}
+            maxSize="60%"
+            className="min-h-0"
+            onResize={handleTimelineResize}
+            panelRef={timelinePanelRef}
+          >
+            <BranchTimeline
+              snapshot={snapshot}
+              branches={branches}
+              currentBranchId={currentBranchId}
+              onSwitchBranch={handleSwitchBranch}
+              onCreateBranch={handleCreateBranch}
+              onDeleteBranch={handleDeleteBranch}
+              expanded={timelineExpanded}
+              fill
+              onExpandedChange={handleTimelineExpandedChange}
+            />
+          </Panel>
+        </Group>
       </div>
     </div>
   )
+}
+
+function InteractiveResizeHandle({ direction, label }: { direction: 'horizontal' | 'vertical'; label: string }) {
+  const className = direction === 'vertical'
+    ? '-mx-1 w-2 cursor-col-resize bg-transparent transition-colors hover:bg-[#2f7dd3]/40 data-[resize-handle-active]:bg-[#2f7dd3]/60'
+    : '-my-1 h-2 cursor-row-resize bg-transparent transition-colors hover:bg-[#2f7dd3]/40 data-[resize-handle-active]:bg-[#2f7dd3]/60'
+
+  return <Separator aria-label={label} className={className} />
+}
+
+function readStoredLayout(key: string): Layout | undefined {
+  if (typeof window === 'undefined') return undefined
+  const value = window.localStorage.getItem(key)
+  if (!value) return undefined
+  try {
+    return JSON.parse(value) as Layout
+  } catch {
+    return undefined
+  }
+}
+
+function storeLayout(key: string, layout: Layout) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(key, JSON.stringify(layout))
 }

@@ -48,4 +48,39 @@ describe('BranchTimeline', () => {
     expect(screen.getByText('已选节点')).toBeInTheDocument()
     expect(onCreateBranch).not.toHaveBeenCalled()
   })
+
+  it('connects adjacent nodes on the same branch when parent metadata is missing', () => {
+    render(
+      <BranchTimeline
+        currentBranchId="main"
+        branches={[
+          { id: 'main', head: 'ev_3', created_at: '', current: true },
+        ]}
+        snapshot={{
+          story_id: 'st_1',
+          branch_id: 'main',
+          turns: [],
+          state: {},
+          graph: {
+            branches: [
+              { id: 'main', head: 'ev_3', created_at: '', current: true },
+            ],
+            nodes: [
+              { id: 'ev_1', branch_id: 'main', title: '第一幕', summary: '', ts: '', current: true, head: false },
+              { id: 'ev_2', branch_id: 'main', title: '第二幕', summary: '', ts: '', current: true, head: false },
+              { id: 'ev_3', branch_id: 'main', title: '第三幕', summary: '', ts: '', current: true, head: true },
+            ],
+          },
+        }}
+        onSwitchBranch={vi.fn()}
+        onCreateBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('剧情路线图'))
+
+    const canvas = screen.getByTestId('branch-graph-canvas')
+    expect(canvas.querySelectorAll('svg path')).toHaveLength(2)
+  })
 })

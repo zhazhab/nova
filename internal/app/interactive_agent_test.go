@@ -39,7 +39,7 @@ func TestInteractiveConversationBuildsHistoryAndPersistsAssistantToStory(t *test
 		t.Fatal(err)
 	}
 
-	conversation := newInteractiveConversation(store, novaDir, workspace, story.ID, "", "我点燃火把")
+	conversation := newInteractiveConversation(store, novaDir, workspace, story.ID, "", "我点燃火把", 1200)
 	history, err := conversation.PrepareMessages("我点燃火把", "我点燃火把")
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +51,7 @@ func TestInteractiveConversationBuildsHistoryAndPersistsAssistantToStory(t *test
 		!strings.Contains(history[0].Content, "末日开端") ||
 		!strings.Contains(history[0].Content, "主角醒来发现世界已末日") ||
 		!strings.Contains(history[0].Content, "经典叙事者") ||
+		!strings.Contains(history[0].Content, "1200 个中文字") ||
 		!strings.Contains(history[0].Content, "林川：谨慎的幸存者") ||
 		!strings.Contains(history[0].Content, "世界已进入黄昏末日。") ||
 		!strings.Contains(history[0].Content, `"on_stage"`) {

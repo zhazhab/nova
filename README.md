@@ -158,6 +158,7 @@ my-novel/
 │       ├── 古龙.md
 │       └── 番茄.txt
 └── .nova/
+    ├── config.toml
     └── sessions/
 ```
 
@@ -166,6 +167,7 @@ my-novel/
 - `CREATOR.md` 是作品级最高优先级创作者指令。
 - `chapters/` 存放正文，章节文件建议遵循 `chXX-章节名.md`。
 - `setting/styles/` 存放文风参考，可在 AI 输入框中通过 `#` 引用。
+- `.nova/config.toml` 存放当前书籍的工作区级配置，例如互动模式单轮目标字数 `interactive_reply_target_chars`，以及可选最大输出 Token `interactive_max_tokens`。
 - `.nova/sessions/` 存放会话历史。
 
 ## 常用交互
@@ -207,4 +209,3 @@ Nova 的版本管理基于书籍 workspace 内的本地 Git 仓库：
 ## 发布记录
 
 查看 [CHANGELOG.md](./CHANGELOG.md)。
-

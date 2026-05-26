@@ -20,7 +20,7 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
   const pov = pickString(state, ['pov', 'viewpoint', '视角'])
 
   return (
-    <aside className="flex h-full w-[336px] shrink-0 flex-col border-l border-[#2f3540] bg-[#1b1e24] p-4">
+    <aside className="flex h-full min-w-0 flex-col border-l border-[#2f3540] bg-[#1b1e24] p-4">
       <div className="mb-3 flex h-8 items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-[#e0e4ec]">场景记忆</h2>
@@ -34,7 +34,7 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
             <MapPin className="h-3.5 w-3.5" />
             当前场景
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(72px,1fr))] gap-2">
             <SnapshotMetric label="地点" value={location || '未记录'} />
             <SnapshotMetric label="时间" value={time || '未记录'} />
             <SnapshotMetric label="视角" value={pov || '未记录'} />

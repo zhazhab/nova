@@ -15,16 +15,17 @@ import (
 )
 
 type interactiveConversation struct {
-	store     *interactive.Store
-	novaDir   string
-	workspace string
-	storyID   string
-	branchID  string
-	user      string
+	store            *interactive.Store
+	novaDir          string
+	workspace        string
+	storyID          string
+	branchID         string
+	user             string
+	replyTargetChars int
 }
 
-func newInteractiveConversation(store *interactive.Store, novaDir, workspace, storyID, branchID, user string) *interactiveConversation {
-	return &interactiveConversation{store: store, novaDir: novaDir, workspace: workspace, storyID: storyID, branchID: branchID, user: user}
+func newInteractiveConversation(store *interactive.Store, novaDir, workspace, storyID, branchID, user string, replyTargetChars int) *interactiveConversation {
+	return &interactiveConversation{store: store, novaDir: novaDir, workspace: workspace, storyID: storyID, branchID: branchID, user: user, replyTargetChars: replyTargetChars}
 }
 
 func (c *interactiveConversation) PrepareMessages(originalMessage, agentMessage string) ([]*schema.Message, error) {
@@ -47,6 +48,7 @@ func (c *interactiveConversation) PrepareMessages(originalMessage, agentMessage 
 		StoryTellerID:     storyCtx.Meta.StoryTellerID,
 		StoryTeller:       tellerPrompt,
 		BranchID:          storyCtx.Snapshot.BranchID,
+		ReplyTargetChars:  c.replyTargetChars,
 		Characters:        c.readSettingFile("characters.md"),
 		WorldBuilding:     c.readSettingFile("world-building.md"),
 		SnapshotStateJSON: string(stateJSON),

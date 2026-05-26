@@ -20,13 +20,13 @@ import (
 
 // Build 构建小说创作 Agent（deep agent + 文件系统工具 + Skill 中间件）。
 func Build(ctx context.Context, cfg *config.Config, state *book.State) (adk.Agent, error) {
-	return buildDeepAgent(ctx, cfg, "NovaAgent", "AI 小说创作助手", BuildInstruction(cfg, state), true, false, nil)
+	return buildDeepAgent(ctx, cfg, "NovaAgent", "AI 小说创作助手", BuildInstruction(cfg, state), true, false, nil, nil)
 }
 
 func BuildInteractiveStory(ctx context.Context, cfg *config.Config, state *book.State) (adk.Agent, error) {
 	return buildDeepAgent(ctx, cfg, "NovaInteractiveStoryAgent", "AI 互动故事叙事助手", BuildInteractiveStoryInstruction(cfg, state), false, true, []adk.ChatModelAgentMiddleware{
 		newInteractiveStoryToolMiddleware(),
-	})
+	}, interactiveMaxTokens(cfg))
 }
 
 func buildDeepAgent(
@@ -38,11 +38,13 @@ func buildDeepAgent(
 	enableSkills bool,
 	disableWriteTodos bool,
 	extraHandlers []adk.ChatModelAgentMiddleware,
+	maxTokens *int,
 ) (adk.Agent, error) {
 	cm, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		APIKey:  cfg.OpenAIAPIKey,
-		Model:   cfg.OpenAIModel,
-		BaseURL: cfg.OpenAIBaseURL,
+		APIKey:    cfg.OpenAIAPIKey,
+		Model:     cfg.OpenAIModel,
+		BaseURL:   cfg.OpenAIBaseURL,
+		MaxTokens: maxTokens,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("创建模型失败: %w", err)
@@ -97,6 +99,14 @@ func buildDeepAgent(
 			},
 		},
 	})
+}
+
+func interactiveMaxTokens(cfg *config.Config) *int {
+	if cfg == nil || cfg.InteractiveMaxTokens <= 0 {
+		return nil
+	}
+	tokens := cfg.InteractiveMaxTokens
+	return &tokens
 }
 
 // handleUnknownTool 拦截 LLM 调用未知工具的错误，把可读提示作为工具结果回传给模型，

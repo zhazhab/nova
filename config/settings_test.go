@@ -21,17 +21,24 @@ func TestDefaultSettingsValues(t *testing.T) {
 	if s.MaxIteration == nil || *s.MaxIteration != 50 {
 		t.Fatalf("MaxIteration default")
 	}
+	if s.InteractiveReplyTargetChars == nil || *s.InteractiveReplyTargetChars != 1200 {
+		t.Fatalf("InteractiveReplyTargetChars default")
+	}
 }
 
 func TestMergeOverridesNonZero(t *testing.T) {
 	parent := Settings{
-		OpenAIBaseURL: "https://parent",
-		OpenAIModel:   "p-model",
-		MaxIteration:  intPtr(10),
+		OpenAIBaseURL:               "https://parent",
+		OpenAIModel:                 "p-model",
+		MaxIteration:                intPtr(10),
+		InteractiveReplyTargetChars: intPtr(1200),
+		InteractiveMaxTokens:        intPtr(0),
 	}
 	child := Settings{
-		OpenAIModel:  "c-model", // override
-		MaxIteration: nil,       // 继承 parent
+		OpenAIModel:                 "c-model", // override
+		MaxIteration:                nil,       // 继承 parent
+		InteractiveReplyTargetChars: intPtr(800),
+		InteractiveMaxTokens:        intPtr(4000),
 	}
 	out := Merge(parent, child)
 	if out.OpenAIBaseURL != "https://parent" {
@@ -42,6 +49,12 @@ func TestMergeOverridesNonZero(t *testing.T) {
 	}
 	if out.MaxIteration == nil || *out.MaxIteration != 10 {
 		t.Fatalf("MaxIteration should inherit parent")
+	}
+	if out.InteractiveReplyTargetChars == nil || *out.InteractiveReplyTargetChars != 800 {
+		t.Fatalf("InteractiveReplyTargetChars should override parent")
+	}
+	if out.InteractiveMaxTokens == nil || *out.InteractiveMaxTokens != 4000 {
+		t.Fatalf("InteractiveMaxTokens should override parent")
 	}
 }
 

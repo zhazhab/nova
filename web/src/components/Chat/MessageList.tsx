@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import type { WheelEvent } from 'react'
 import { MessageItem, ToolActivityBlock } from './MessageItem'
 import type { ChatMessage } from '@/lib/api'
 
@@ -7,53 +8,112 @@ interface MessageListProps {
   isStreaming: boolean
   activityContent: string
   highlightDialogue?: boolean
+  scrollResetKey?: string
+  bottomPaddingClassName?: string
 }
 
 /** 消息列表组件，支持流式内容实时展示和自动滚动 */
-export function MessageList({ messages, isStreaming, activityContent, highlightDialogue = false }: MessageListProps) {
+export function MessageList({ messages, isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '' }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldAutoScrollRef = useRef(true)
   const mountedRef = useRef(false)
   const hasRenderedContentRef = useRef(false)
   const scrollRafRef = useRef<number | null>(null)
+  const resetScrollRafRef = useRef<number[]>([])
+  const resetScrollTimerRef = useRef<number | null>(null)
+  const bottomThreshold = 8
 
-  /** 主列表：用户上滑时暂停自动滚动，回到底部后恢复。 */
-  const handleContainerScroll = useCallback(() => {
+  const forceScrollToBottom = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    shouldAutoScrollRef.current = distanceToBottom < 50
+    el.scrollTop = el.scrollHeight
   }, [])
+
+  const cancelResetScroll = useCallback(() => {
+    for (const id of resetScrollRafRef.current) {
+      cancelAnimationFrame(id)
+    }
+    resetScrollRafRef.current = []
+    if (resetScrollTimerRef.current !== null) {
+      window.clearTimeout(resetScrollTimerRef.current)
+      resetScrollTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleForceScrollToBottom = useCallback(() => {
+    cancelResetScroll()
+    forceScrollToBottom()
+    resetScrollRafRef.current.push(requestAnimationFrame(() => {
+      forceScrollToBottom()
+      resetScrollRafRef.current.push(requestAnimationFrame(forceScrollToBottom))
+    }))
+    resetScrollTimerRef.current = window.setTimeout(forceScrollToBottom, 80)
+  }, [cancelResetScroll, forceScrollToBottom])
+
+  const cancelPendingAutoScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+    cancelResetScroll()
+  }, [cancelResetScroll])
+
+  useLayoutEffect(() => {
+    hasRenderedContentRef.current = false
+    shouldAutoScrollRef.current = true
+    scheduleForceScrollToBottom()
+    return cancelResetScroll
+  }, [cancelResetScroll, scheduleForceScrollToBottom, scrollResetKey])
 
   // 自动滚动到底部（仅在用户未上滑时）
   useLayoutEffect(() => {
+    const hasContent = messages.length > 0 || activityContent.length > 0 || isStreaming
+    const shouldJumpToBottom = hasContent && !hasRenderedContentRef.current
+    if (shouldJumpToBottom) {
+      shouldAutoScrollRef.current = true
+      scheduleForceScrollToBottom()
+      hasRenderedContentRef.current = true
+      mountedRef.current = true
+      return
+    }
+
     if (shouldAutoScrollRef.current) {
       if (scrollRafRef.current !== null) {
         cancelAnimationFrame(scrollRafRef.current)
       }
-      const hasContent = messages.length > 0 || activityContent.length > 0 || isStreaming
-      const shouldJumpToBottom = hasContent && !hasRenderedContentRef.current
       scrollRafRef.current = requestAnimationFrame(() => {
         scrollRafRef.current = null
-        const el = containerRef.current
-        if (shouldJumpToBottom && el) {
-          el.scrollTop = el.scrollHeight
-        } else {
-          bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'instant' : (mountedRef.current ? 'smooth' : 'instant') })
-        }
+        bottomRef.current?.scrollIntoView({ behavior: isStreaming ? 'instant' : (mountedRef.current ? 'smooth' : 'instant') })
         if (hasContent) {
           hasRenderedContentRef.current = true
         }
       })
     }
     mountedRef.current = true
-  }, [messages, activityContent, isStreaming])
+  }, [messages, activityContent, isStreaming, scheduleForceScrollToBottom])
+
+  /** 主列表：用户上滑时暂停自动滚动，回到底部后恢复。 */
+  const handleContainerScroll = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    shouldAutoScrollRef.current = distanceToBottom <= bottomThreshold
+    if (!shouldAutoScrollRef.current) cancelPendingAutoScroll()
+  }, [cancelPendingAutoScroll])
+
+  const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) {
+      shouldAutoScrollRef.current = false
+      cancelPendingAutoScroll()
+    }
+  }, [cancelPendingAutoScroll])
 
   useEffect(() => () => {
     if (scrollRafRef.current !== null) {
       cancelAnimationFrame(scrollRafRef.current)
     }
+    cancelResetScroll()
   }, [])
 
   // 新一轮对话开始时重置跟随状态
@@ -63,7 +123,7 @@ export function MessageList({ messages, isStreaming, activityContent, highlightD
       const el = containerRef.current
       if (el) {
         const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-        if (distanceToBottom < 50) {
+        if (distanceToBottom <= bottomThreshold) {
           shouldAutoScrollRef.current = true
         }
       }
@@ -74,7 +134,8 @@ export function MessageList({ messages, isStreaming, activityContent, highlightD
     <div
       ref={containerRef}
       onScroll={handleContainerScroll}
-      className="flex-1 space-y-4 overflow-y-auto bg-[#15181d] px-6 py-5"
+      onWheel={handleWheel}
+      className={`min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#15181d] px-6 py-5 ${bottomPaddingClassName}`}
     >
       {messages.length === 0 && !isStreaming && (
         <div className="flex h-full items-center justify-center text-sm text-[#858b96]">

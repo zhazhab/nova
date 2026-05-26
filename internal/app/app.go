@@ -249,6 +249,14 @@ func (a *App) StartInteractiveTask(storyID, branchID, message string) *Task {
 	novaDir := runtimeCfg.NovaDir
 	a.mu.Unlock()
 
+	if layered, err := config.LoadLayered(novaDir, workspace); err == nil {
+		runtimeCfg.InteractiveReplyTargetChars = appSettingsInt(layered.Effective.InteractiveReplyTargetChars, 1200)
+		runtimeCfg.InteractiveMaxTokens = appSettingsInt(layered.Effective.InteractiveMaxTokens, 0)
+		log.Printf("[interactive-agent-task] load interactive settings target_chars=%d max_tokens=%d workspace=%s", runtimeCfg.InteractiveReplyTargetChars, runtimeCfg.InteractiveMaxTokens, workspace)
+	} else {
+		log.Printf("[interactive-agent-task] load interactive settings failed workspace=%s err=%v", workspace, err)
+	}
+
 	runner, err := buildInteractiveStoryRunner(context.Background(), &runtimeCfg, state)
 	if err != nil {
 		log.Printf("[interactive-agent-task] 刷新互动故事 Agent Runner 失败 workspace=%s err=%v", workspace, err)
@@ -263,7 +271,7 @@ func (a *App) StartInteractiveTask(storyID, branchID, message string) *Task {
 	req := agent.ChatRequest{
 		Message: message,
 	}
-	conversation := newInteractiveConversation(store, novaDir, workspace, storyID, branchID, message)
+	conversation := newInteractiveConversation(store, novaDir, workspace, storyID, branchID, message, runtimeCfg.InteractiveReplyTargetChars)
 	task := NewTask(func(ctx context.Context, task *Task, emit func(agent.Event)) {
 		log.Printf("[interactive-agent-task] run begin id=%s story_id=%s branch_id=%s message_len=%d", task.ID(), storyID, branchID, len(message))
 		chatService.Run(ctx, runner, conversation, bookService, req, emit)
@@ -920,4 +928,11 @@ func buildInteractiveStoryRunner(ctx context.Context, cfg *config.Config, state 
 		return nil, fmt.Errorf("构建互动故事 Agent 失败: %w", err)
 	}
 	return agent.NewRunner(ctx, builtAgent), nil
+}
+
+func appSettingsInt(v *int, fallback int) int {
+	if v == nil || *v <= 0 {
+		return fallback
+	}
+	return *v
 }

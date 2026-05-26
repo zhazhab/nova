@@ -35,7 +35,7 @@ export function SettingPanel() {
   }
 
   return (
-    <aside className="flex h-full w-[320px] shrink-0 flex-col border-r border-[#2f3540] bg-[#1b1e24] p-4">
+    <aside className="flex h-full min-w-0 flex-col border-r border-[#2f3540] bg-[#1b1e24] p-4">
       <div className="mb-3 flex h-8 items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-[#e0e4ec]">资料库</div>
@@ -45,11 +45,11 @@ export function SettingPanel() {
       </div>
       <div className="mb-3">
         <Tabs value={active} onValueChange={setActive}>
-          <TabsList className="h-9 w-full bg-[#252a33]">
+          <TabsList className="h-auto min-h-9 w-full flex-wrap bg-[#252a33]">
             {FILES.map((file) => {
               const Icon = file.icon
               return (
-                <TabsTrigger key={file.path} value={file.path} className="gap-1.5 text-xs">
+                <TabsTrigger key={file.path} value={file.path} className="min-w-0 flex-1 gap-1.5 text-xs">
                   <Icon className="h-3.5 w-3.5" />
                   {file.label}
                 </TabsTrigger>

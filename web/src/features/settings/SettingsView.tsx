@@ -185,7 +185,18 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
           </>
         ) : (
           <Section title="互动模式">
-            <ReadOnly label="专属配置" value="当前版本暂无互动模式专属配置；上方公共配置会同时作用于互动模式。" />
+            {activeLayer === 'workspace' ? (
+              <>
+                <Num label="单轮目标字数" value={draft.interactive_reply_target_chars ?? null}
+                     placeholder={placeholderFor('interactive_reply_target_chars')}
+                     onChange={(v) => setField('interactive_reply_target_chars', v)} />
+                <Num label="最大输出 Token" value={draft.interactive_max_tokens ?? null}
+                     placeholder="不填则不限制，优先避免截断"
+                     onChange={(v) => setField('interactive_max_tokens', v)} />
+              </>
+            ) : (
+              <ReadOnly label="单轮目标字数" value={`当前工作区配置，生效值：${effective.interactive_reply_target_chars ?? 1200} 个中文字`} />
+            )}
           </Section>
         )}
       </div>

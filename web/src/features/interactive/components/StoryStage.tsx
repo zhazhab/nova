@@ -45,6 +45,8 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
   }, [liveMessages, snapshot?.turns, streaming])
 
   const messages = useMemo(() => [...historyMessages, ...visibleLiveMessages], [historyMessages, visibleLiveMessages])
+  const latestTurnId = snapshot?.turns?.[snapshot.turns.length - 1]?.id || 'empty'
+  const scrollResetKey = `${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}:${latestTurnId}`
 
   const send = async () => {
     const message = input.trim()
@@ -66,7 +68,10 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
           case 'chunk': {
             const data = JSON.parse(value.data)
             const visible = narrativeFilter.push(data.content || '')
-            if (visible) appendAssistantMessage(visible)
+            if (visible) {
+              collapseNonNarrativeMessages()
+              appendAssistantMessage(visible)
+            }
             setActivityContent('')
             break
           }
@@ -78,34 +83,14 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
           }
           case 'tool_call': {
             const data = JSON.parse(value.data)
-            setActivityContent('')
-            setLiveMessages((prev) => [...prev, {
-              id: data.id,
-              role: 'tool_call',
-              content: `调用工具 ${data.name || 'unknown_tool'}`,
-              name: data.name || 'unknown_tool',
-              args: data.args || '',
-              status: 'running',
-            }])
+            setActivityContent(`正在处理 ${data.name || '工具调用'}…`)
             break
           }
           case 'tool_args_delta': {
-            const data = JSON.parse(value.data)
-            setLiveMessages((prev) => prev.map((msg) => (
-              msg.role === 'tool_call' && msg.id === data.id
-                ? { ...msg, args: `${msg.args || ''}${data.delta || ''}` }
-                : msg
-            )))
             break
           }
           case 'tool_result': {
-            const data = JSON.parse(value.data)
             setActivityContent('')
-            setLiveMessages((prev) => prev.map((msg) => (
-              msg.role === 'tool_call' && msg.id === data.id
-                ? { ...msg, status: 'success', result: data.content || '' }
-                : msg
-            )))
             break
           }
           case 'error': {
@@ -116,12 +101,14 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
           }
           case 'done': {
             const visible = narrativeFilter.flush()
+            collapseNonNarrativeMessages()
             if (visible) appendAssistantMessage(visible)
             setActivityContent('完成')
             break
           }
           case 'aborted': {
             const visible = narrativeFilter.flush()
+            collapseNonNarrativeMessages()
             if (visible) appendAssistantMessage(visible)
             setActivityContent('已中断')
             break
@@ -148,7 +135,7 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col bg-[#17191d] p-4">
+    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#17191d] p-4">
       <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#343b47] bg-[#101216] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
         <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#262c35] px-5">
           <div className="min-w-0">
@@ -180,10 +167,18 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
             输入第一句话，开始互动故事。
           </div>
         ) : (
-          <MessageList messages={messages} isStreaming={streaming} activityContent={activityContent} highlightDialogue />
+          <MessageList
+            messages={messages}
+            isStreaming={streaming}
+            activityContent={activityContent}
+            highlightDialogue
+            scrollResetKey={scrollResetKey}
+            bottomPaddingClassName="pb-32"
+          />
         )}
       </div>
-      <div className="mt-3 rounded-xl border border-[#343b47] bg-[#101216] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[#17191d] via-[#17191d]/95 to-transparent pt-8">
+        <div className="pointer-events-auto rounded-xl border border-[#343b47] bg-[#101216]/95 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur">
         <div className="flex items-center gap-3">
           <Textarea
             className="h-16 min-h-16 flex-1 resize-none border-[#343b47] bg-[#1b2028] text-sm leading-6 text-[#d7dbe2] placeholder:text-[#778091] focus-visible:ring-1"
@@ -207,6 +202,7 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
             {streaming ? '中断' : '发送'}
           </Button>
         </div>
+        </div>
       </div>
     </main>
   )
@@ -226,11 +222,19 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
     if (!content) return
     setLiveMessages((prev) => {
       const last = prev[prev.length - 1]
-      if (last?.role === 'thinking' && last.streaming) {
-        return [...prev.slice(0, -1), { ...last, content: `${last.content || ''}${content}` }]
+      if (last?.role === 'thinking') {
+        return [...prev.slice(0, -1), { ...last, content: `${last.content || ''}${content}`, streaming: true }]
       }
       return [...prev, { role: 'thinking', content, streaming: true }]
     })
+  }
+
+  function collapseNonNarrativeMessages() {
+    setLiveMessages((prev) => prev.map((msg) => (
+      msg.role === 'thinking' || msg.role === 'tool_call'
+        ? { ...msg, streaming: false, status: msg.role === 'tool_call' ? (msg.status === 'running' ? 'success' : msg.status) : msg.status }
+        : msg
+    )))
   }
 }
 

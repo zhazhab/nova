@@ -31,6 +31,10 @@ type Settings struct {
 	ModelMaxRetries *int  `toml:"model_max_retries,omitempty" json:"model_max_retries,omitempty"`
 	PlanModeDefault *bool `toml:"plan_mode_default,omitempty" json:"plan_mode_default,omitempty"`
 
+	// 互动模式
+	InteractiveReplyTargetChars *int `toml:"interactive_reply_target_chars,omitempty" json:"interactive_reply_target_chars,omitempty"`
+	InteractiveMaxTokens        *int `toml:"interactive_max_tokens,omitempty" json:"interactive_max_tokens,omitempty"`
+
 	// 风格：场景化默认风格规则（仅工作区级生效）。
 	// 每条规则关联一个自然语言场景描述与若干 setting/styles/ 下的风格文件，
 	// 由 Agent 基于本轮章节内容自动匹配场景并选择对应风格文件。
@@ -52,17 +56,18 @@ func intPtr(v int) *int    { return &v }
 // DefaultSettings 返回内置默认配置（最低优先级）。
 func DefaultSettings() Settings {
 	return Settings{
-		OpenAIBaseURL:         "https://api.deepseek.com",
-		OpenAIModel:           "deepseek-v4-pro",
-		SkillsDir:             "./skills",
-		NovaDir:               "./.nova",
-		AutoSaveEnabled:       boolPtr(true),
-		AutoSaveIntervalMs:    intPtr(1500),
-		ChapterFilenameFormat: "ch{NN}-{title}.md",
-		MaxOpenTabs:           intPtr(5),
-		MaxIteration:          intPtr(50),
-		ModelMaxRetries:       intPtr(5),
-		PlanModeDefault:       boolPtr(false),
+		OpenAIBaseURL:               "https://api.deepseek.com",
+		OpenAIModel:                 "deepseek-v4-pro",
+		SkillsDir:                   "./skills",
+		NovaDir:                     "./.nova",
+		AutoSaveEnabled:             boolPtr(true),
+		AutoSaveIntervalMs:          intPtr(1500),
+		ChapterFilenameFormat:       "ch{NN}-{title}.md",
+		MaxOpenTabs:                 intPtr(5),
+		MaxIteration:                intPtr(50),
+		ModelMaxRetries:             intPtr(5),
+		PlanModeDefault:             boolPtr(false),
+		InteractiveReplyTargetChars: intPtr(1200),
 	}
 }
 
@@ -105,6 +110,12 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.PlanModeDefault != nil {
 		out.PlanModeDefault = child.PlanModeDefault
+	}
+	if child.InteractiveReplyTargetChars != nil {
+		out.InteractiveReplyTargetChars = child.InteractiveReplyTargetChars
+	}
+	if child.InteractiveMaxTokens != nil {
+		out.InteractiveMaxTokens = child.InteractiveMaxTokens
 	}
 	// 场景化风格规则：工作区级覆盖，nil 视为未设置；空切片表示显式清空。
 	if child.StyleRules != nil {

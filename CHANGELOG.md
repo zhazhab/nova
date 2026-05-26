@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- 互动模式：新增工作区级 TOML 配置 `interactive_reply_target_chars`，默认 1200 个中文字；新增可选 `interactive_max_tokens`，默认不限制以优先避免非自然截断；设置页可在「当前工作区 / 互动模式」中调整，下一轮互动对话立即生效
 - 互动模式：新增删除空剧情线能力，后端提供分支删除接口并保护主线和已有独立剧情的分支不被删除
 - WebUI：互动模式场景记忆面板支持结构化渲染角色状态与关键事件，将状态对象展示为可读中文字段、标签和事件卡片，并保留复杂值兜底展示
 - 互动模式：剧情分支基于 story JSONL 的 `parent_id` 构建剧情节点图，snapshot 新增 `graph.nodes` / `graph.branches`，底部时间线改为可横向拖动滚动的 macOS 风格 Git Graph 视图，用 SVG 曲线连接父子与分叉节点；点击节点先选中并切换到对应剧情线，再由用户确认是否创建新剧情线
@@ -17,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- WebUI：优化互动模式剧情路线图的布局计算与渲染，避免打开分支面板时因重复回溯节点父链产生卡顿；窄屏下改为自适应画布布局，并补齐同分支连续节点连接线
+- WebUI：互动模式左右资料面板、场景记忆面板和底部剧情路线图改为可拖拽调整尺寸，并持久化互动工作台面板布局
 - 后端 `interactive`：修复分支快照按分支名粗过滤导致从旧节点分叉时带入原分支后续剧情的问题，改为从目标 head 沿 `parent_id` 父链恢复 turn 与 state_delta
 - 互动模式：关闭 story 子模式 Deep Agent 内置 `write_todos` 工具，并在专用系统提示中禁止输出 `<invoke>`/待办工具调用，避免模型按计划工具格式生成 malformed tool call 导致流式任务异常中断
 - 后端 `app`：每次启动普通对话或互动故事对话前刷新 Agent Runner，重新读取当前 workspace 的 `CREATOR.md` 与作品状态，确保用户修改创作者指令后下一轮对话立即生效

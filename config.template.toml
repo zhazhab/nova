@@ -27,3 +27,8 @@ chapter_filename_format = "ch{NN}-{title}.md"
 max_iteration = 50
 model_max_retries = 5
 plan_mode_default = false
+
+# 互动模式
+interactive_reply_target_chars = 1200
+# 留空或 0 表示不限制，优先避免非自然截断
+interactive_max_tokens = 0

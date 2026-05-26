@@ -15,6 +15,8 @@ export interface Settings {
   max_iteration?: number | null
   model_max_retries?: number | null
   plan_mode_default?: boolean | null
+  interactive_reply_target_chars?: number | null
+  interactive_max_tokens?: number | null
   style_rules?: StyleRule[] | null
 }
 

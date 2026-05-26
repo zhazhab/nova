@@ -80,7 +80,13 @@ func isAllowedStatePath(path string) bool {
 	path = strings.TrimSpace(path)
 	return path == "on_stage" ||
 		path == "events" ||
+		path == "location" ||
+		path == "time" ||
+		path == "pov" ||
 		strings.HasPrefix(path, "characters.") ||
 		strings.HasPrefix(path, "events.") ||
-		strings.HasPrefix(path, "on_stage.")
+		strings.HasPrefix(path, "on_stage.") ||
+		strings.HasPrefix(path, "location.") ||
+		strings.HasPrefix(path, "time.") ||
+		strings.HasPrefix(path, "pov.")
 }

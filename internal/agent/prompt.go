@@ -18,15 +18,18 @@ func BuildInstruction(cfg *config.Config, state *book.State) string {
 
 func BuildInteractiveStoryInstruction(cfg *config.Config, state *book.State) string {
 	workspace := ""
+	replyTargetChars := 0
 	if cfg != nil {
 		workspace = cfg.Workspace
+		replyTargetChars = cfg.InteractiveReplyTargetChars
 	}
 	creator := ""
 	if state != nil {
 		creator = state.ReadCreatorPrompt()
 	}
 	return prompts.BuildInteractiveStorySystemInstruction(prompts.InteractiveStorySystemInstructionInput{
-		CreatorPrompt: creator,
-		Workspace:     workspace,
+		CreatorPrompt:    creator,
+		Workspace:        workspace,
+		ReplyTargetChars: replyTargetChars,
 	})
 }

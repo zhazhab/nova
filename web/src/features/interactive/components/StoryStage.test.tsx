@@ -57,6 +57,7 @@ describe('StoryStage', () => {
     )
 
     expect(screen.getAllByText('Nova').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('story-stage-card').parentElement).toHaveClass('h-full', 'overflow-hidden')
     expect(screen.getByText('我推开酒馆的门')).toBeInTheDocument()
     expect(screen.getByText('门后传来低沉的风声。')).toBeInTheDocument()
 
@@ -64,7 +65,8 @@ describe('StoryStage', () => {
     fireEvent.click(screen.getByRole('button', { name: /发送/ }))
 
     await screen.findByText('我点燃火把')
-    await screen.findByText('先判断现场风险。')
+    expect(screen.queryByText('先判断现场风险。')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /思考过程/ })).toBeInTheDocument()
     await screen.findByText(/火光照亮了墙上的新线索。/)
     expect(screen.queryByText(/STATE_DELTA/)).not.toBeInTheDocument()
     expect(screen.queryByText(/on_stage/)).not.toBeInTheDocument()

@@ -747,6 +747,7 @@ function App() {
         messages={messages}
         isStreaming={isStreaming}
         activityContent={activityContent}
+        scrollResetKey={`${workspace || 'none'}:${activeSessionId || 'current'}`}
       />
       <InputArea
         onSend={send}

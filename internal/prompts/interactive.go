@@ -6,8 +6,9 @@ import (
 )
 
 type InteractiveStorySystemInstructionInput struct {
-	CreatorPrompt string
-	Workspace     string
+	CreatorPrompt    string
+	Workspace        string
+	ReplyTargetChars int
 }
 
 type InteractiveStoryPromptInput struct {
@@ -16,10 +17,13 @@ type InteractiveStoryPromptInput struct {
 	StoryTellerID     string
 	StoryTeller       string
 	BranchID          string
+	ReplyTargetChars  int
 	Characters        string
 	WorldBuilding     string
 	SnapshotStateJSON string
 }
+
+const defaultInteractiveReplyTargetChars = 1200
 
 func BuildInteractiveStorySystemInstruction(in InteractiveStorySystemInstructionInput) string {
 	var sb strings.Builder
@@ -42,6 +46,8 @@ func BuildInteractiveStorySystemInstruction(in InteractiveStorySystemInstruction
 	sb.WriteString("- 不要在主角每做一个小动作时立刻停下等待用户；只有当局势出现有意义的分岔、风险、代价或信息不足时，才把选择权交还给用户。\n")
 	sb.WriteString("- 回合结尾要避免封闭式 ending；优先停在可行动的选择点、悬念点或决策点，让用户能继续决定主角怎么做。\n")
 	sb.WriteString("- 可以在正文结尾自然呈现 2 到 4 个可选行动方向，但不要写成游戏 UI 菜单，也不要替用户决定下一步选择。\n\n")
+	fmt.Fprintf(&sb, "- 本轮回复目标长度约为 %d 个中文字以内；你需要主动收束内容，优先写聚焦、有推进、可继续互动的一回合，不要依赖输出上限截断。\n\n", normalizeInteractiveReplyTargetChars(in.ReplyTargetChars))
+	sb.WriteString("- 若本回合出现角色位置、状态、关系、在场人物、地点、时间或关键事件变化，必须在正文后追加完整 <STATE_DELTA> JSON；不要把状态变化只写在正文里。\n\n")
 	sb.WriteString("## 输出协议\n")
 	sb.WriteString("必须只输出以下结构，不要输出计划、解释、工具说明或 Markdown 标题：\n")
 	sb.WriteString("<NARRATIVE>\n本回合展示在故事舞台上的正文\n</NARRATIVE>\n")
@@ -68,12 +74,14 @@ func InteractiveStoryContext(in InteractiveStoryPromptInput) string {
 	sb.WriteString("{\"ops\":[{\"op\":\"set\",\"path\":\"on_stage\",\"value\":[\"角色名\"]}]}\n")
 	sb.WriteString("</STATE_DELTA>\n\n")
 	sb.WriteString("如果本回合没有明确状态变化，可以省略整个 <STATE_DELTA> 块。STATE_DELTA 只记录本回合已经发生、确定成立的变化，不要记录未来计划。\n")
-	sb.WriteString("状态 path 仅允许 on_stage、characters.<角色名>、events 及其子路径；op 仅允许 set、merge、push、pull、inc、unset。\n\n")
+	sb.WriteString("状态 path 仅允许 on_stage、characters.<角色名>、events、location、time、pov 及其子路径；op 仅允许 set、merge、push、pull、inc、unset。\n\n")
 	sb.WriteString("## 叙事节奏\n")
 	sb.WriteString("- 本回合应该像小说片段一样推进场景：环境有反馈，人物有反应，对话和动作可以自然发生。\n")
 	sb.WriteString("- 不要把用户输入只复述一遍后立刻停止；要写出行动带来的具体后果、发现、阻碍或机会。\n")
 	sb.WriteString("- 不要替用户完成重大选择、不可逆决定或长期目标；这些应留到回合末尾成为下一步互动入口。\n")
 	sb.WriteString("- 每回合结尾避免封闭收束；尽可能给用户留下清晰但开放的下一步选择。\n\n")
+	fmt.Fprintf(&sb, "本轮 NARRATIVE 目标长度约为 %d 个中文字以内。请主动控制篇幅，保证结尾完整收束到开放选择点。\n\n", normalizeInteractiveReplyTargetChars(in.ReplyTargetChars))
+	sb.WriteString("如果本回合改变了角色状态、在场角色、地点、时间或关键事件，请追加完整 STATE_DELTA。常用路径：on_stage、characters.<角色名>、events、location、time、pov。\n\n")
 	sb.WriteString("## 故事信息\n")
 	writeField(&sb, "标题", in.Title)
 	writeField(&sb, "开端", in.Origin)
@@ -84,6 +92,13 @@ func InteractiveStoryContext(in InteractiveStoryPromptInput) string {
 	writeBlock(&sb, "世界观设定", in.WorldBuilding)
 	writeBlock(&sb, "当前互动状态快照(JSON)", in.SnapshotStateJSON)
 	return sb.String()
+}
+
+func normalizeInteractiveReplyTargetChars(v int) int {
+	if v <= 0 {
+		return defaultInteractiveReplyTargetChars
+	}
+	return v
 }
 
 func InteractiveStoryTurnInstruction(message string) string {
