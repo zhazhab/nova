@@ -28,11 +28,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { createInteractiveTeller, deleteInteractiveTeller, getInteractiveTellers, updateInteractiveTeller } from '../api'
-import type { Teller, TellerPromptSlot } from '../types'
+import { clearInteractiveTellerAgentSession, createInteractiveTeller, deleteInteractiveTeller, getInteractiveTellerAgentMessages, getInteractiveTellers, runInteractiveTellerAgentStream, updateInteractiveTeller } from '../api'
+import type { Teller, TellerAgentResult, TellerPromptSlot } from '../types'
 
 const CREATOR_PATH = 'CREATOR.md'
 const LORE_AGENT_ENTRY_ID = '__lore_agent__'
+const TELLER_AGENT_ENTRY_ID = '__teller_agent__'
 
 const TYPE_OPTIONS = [
   { value: 'character', label: '角色' },
@@ -114,6 +115,7 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
   const [creatorContent, setCreatorContent] = useState('')
   const [tellers, setTellers] = useState<Teller[]>(externalTellers)
   const [activeTellerId, setActiveTellerId] = useState('')
+  const [tellerAgentTargetId, setTellerAgentTargetId] = useState('')
   const [tellerDraft, setTellerDraft] = useState<Teller | null>(null)
   const [tellerTagDraft, setTellerTagDraft] = useState('')
   const [activeSlotId, setActiveSlotId] = useState('')
@@ -159,9 +161,16 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
   useEffect(() => {
     setTellers(externalTellers)
     setActiveTellerId((current) => current || externalTellers[0]?.id || '')
+    setTellerAgentTargetId((current) => current || externalTellers[0]?.id || '')
   }, [externalTellers])
 
   useEffect(() => {
+    if (activeTellerId === TELLER_AGENT_ENTRY_ID) {
+      setTellerDraft(null)
+      setTellerTagDraft('')
+      setActiveSlotId('')
+      return
+    }
     const teller = tellers.find((entry) => entry.id === activeTellerId) || null
     setTellerDraft(teller ? {
       ...teller,
@@ -189,6 +198,7 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
     setTellers(data)
     onTellersChange?.(data)
     setActiveTellerId(nextActiveId || data[0]?.id || '')
+    setTellerAgentTargetId((current) => data.some((teller) => teller.id === current) ? current : (nextActiveId || data[0]?.id || ''))
   }
 
   const handleCreateLore = async (section: KnowledgeSection = KNOWLEDGE_SECTIONS[0]) => {
@@ -294,7 +304,22 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
     await refreshVersions()
   }
 
+  const handleTellerAgentResult = (result: TellerAgentResult) => {
+    setTellers(result.tellers || [])
+    onTellersChange?.(result.tellers || [])
+    setActiveTellerId(result.teller.id)
+    setTellerAgentTargetId(result.teller.id)
+  }
+
+  const handleSelectTeller = (id: string) => {
+    setActiveTellerId(id)
+    if (id !== TELLER_AGENT_ENTRY_ID) {
+      setTellerAgentTargetId(id)
+    }
+  }
+
   const isLoreAgentActive = activeMode === 'lore' && activeId === LORE_AGENT_ENTRY_ID
+  const isTellerAgentActive = activeMode === 'teller' && activeTellerId === TELLER_AGENT_ENTRY_ID
   return (
     <section className="flex h-full min-h-0 bg-[var(--nova-surface-2)] text-[var(--nova-text)]">
       <aside className="nova-sidebar flex w-[320px] shrink-0 flex-col border-r">
@@ -323,7 +348,7 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
             tellers={tellers}
             activeTellerId={activeTellerId}
             saving={saving}
-            onSelect={setActiveTellerId}
+            onSelect={handleSelectTeller}
             onCreate={() => void handleCreateTeller()}
           />
         )}
@@ -334,9 +359,9 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <ModeIcon mode={activeMode} />
-              <h2 className="truncate text-sm font-semibold text-[var(--nova-text)]">{isLoreAgentActive ? '资料库 Agent' : editorTitle(activeMode, draft, tellerDraft)}</h2>
+              <h2 className="truncate text-sm font-semibold text-[var(--nova-text)]">{isLoreAgentActive ? '资料库 Agent' : isTellerAgentActive ? '讲述者 Agent' : editorTitle(activeMode, draft, tellerDraft)}</h2>
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-[var(--nova-text-faint)]">{isLoreAgentActive ? '用自然语言批量整理、补充和修改资料库' : editorSubtitle(activeMode, draft, tellerDraft)}</p>
+            <p className="mt-0.5 truncate text-[11px] text-[var(--nova-text-faint)]">{isLoreAgentActive ? '用自然语言批量整理、补充和修改资料库' : isTellerAgentActive ? '用自然语言创建或修改单个讲述者规则包' : editorSubtitle(activeMode, draft, tellerDraft)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeMode === 'lore' && !isLoreAgentActive && (
@@ -344,12 +369,12 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
-            {activeMode === 'teller' && (
+            {activeMode === 'teller' && !isTellerAgentActive && (
               <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || !tellerDraft?.custom} onClick={handleDelete} aria-label="删除讲述者">
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
-            {!isLoreAgentActive && (
+            {!isLoreAgentActive && !isTellerAgentActive && (
               <Button className={actionButtonClassName} variant="outline" size="sm" disabled={saving || (activeMode === 'lore' && !draft) || (activeMode === 'teller' && !tellerDraft)} onClick={handleSave}>
                 <Save className="h-4 w-4" />
                 {saving ? '保存中...' : '保存'}
@@ -377,6 +402,13 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
           </>
         ) : activeMode === 'creator' ? (
           <CreatorEditor content={creatorContent} setContent={setCreatorContent} onSave={handleSave} />
+        ) : isTellerAgentActive ? (
+          <TellerAgentChat
+            tellers={tellers}
+            targetTellerId={tellerAgentTargetId}
+            onTargetTellerIdChange={setTellerAgentTargetId}
+            onResult={handleTellerAgentResult}
+          />
         ) : (
           <TellerEditor
             draft={tellerDraft}
@@ -403,6 +435,18 @@ type LoreAgentChatMessage = {
   toolResult?: string
   references?: LoreItem[]
   result?: LoreAgentResult
+}
+
+type TellerAgentChatMessage = {
+  id: string
+  role: 'user' | 'assistant' | 'thinking' | 'tool_call' | 'error' | 'clear'
+  content: string
+  name?: string
+  args?: string
+  status?: 'running' | 'success' | 'error'
+  toolResult?: string
+  targetTeller?: Teller
+  result?: TellerAgentResult
 }
 
 interface LoreStatusPayload {
@@ -808,6 +852,270 @@ function LoreAgentChat({
   )
 }
 
+function TellerAgentChat({
+  tellers,
+  targetTellerId,
+  onTargetTellerIdChange,
+  onResult,
+}: {
+  tellers: Teller[]
+  targetTellerId: string
+  onTargetTellerIdChange: (id: string) => void
+  onResult: (result: TellerAgentResult) => void
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messageEndRef = useRef<HTMLDivElement>(null)
+  const historyLoadedRef = useRef(false)
+  const [value, setValue] = useState('')
+  const [messages, setMessages] = useState<TellerAgentChatMessage[]>([])
+  const [running, setRunning] = useState(false)
+  const [updateCurrent, setUpdateCurrent] = useState(Boolean(targetTellerId))
+  const targetTeller = tellers.find((teller) => teller.id === targetTellerId) || null
+  const effectiveTargetId = updateCurrent ? (targetTeller?.id || '') : ''
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages, running])
+
+  useEffect(() => {
+    if (!targetTellerId) {
+      setUpdateCurrent(false)
+    }
+  }, [targetTellerId])
+
+  useEffect(() => {
+    if (historyLoadedRef.current) return
+    historyLoadedRef.current = true
+    let cancelled = false
+    getInteractiveTellerAgentMessages()
+      .then((history) => {
+        if (cancelled) return
+        setMessages(history.map((message, index) => tellerHistoryMessageToChat(message, index, tellers)))
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessages([{ id: 'load-error', role: 'error', content: error instanceof Error ? error.message : '讲述者 Agent 历史加载失败' }])
+        }
+      })
+    return () => { cancelled = true }
+  }, [tellers])
+
+  const appendMessage = (message: Omit<TellerAgentChatMessage, 'id'>) => {
+    setMessages((current) => [...current, { ...message, id: `${Date.now()}-${current.length}` }])
+  }
+
+  const appendStreamingMessage = (role: 'assistant' | 'thinking', content: string) => {
+    if (!content) return
+    setMessages((current) => {
+      const last = current[current.length - 1]
+      if (last?.role === role && !last.result) {
+        return [...current.slice(0, -1), { ...last, content: `${last.content}${content}` }]
+      }
+      return [...current, { id: `${Date.now()}-${current.length}`, role, content }]
+    })
+  }
+
+  const upsertToolCall = (payload: LoreToolPayload) => {
+    const id = payload.id || `tool-${Date.now()}`
+    const name = payload.name || '讲述者工具'
+    setMessages((current) => {
+      const existing = current.findIndex((message) => message.id === id)
+      const nextMessage: TellerAgentChatMessage = {
+        id,
+        role: 'tool_call',
+        content: name,
+        name,
+        args: payload.args || '',
+        status: 'running',
+      }
+      if (existing >= 0) {
+        return current.map((message, index) => index === existing ? { ...message, ...nextMessage, args: message.args || nextMessage.args } : message)
+      }
+      return [...current, nextMessage]
+    })
+  }
+
+  const appendToolArgs = (payload: LoreToolPayload) => {
+    if (!payload.id || !payload.delta) return
+    setMessages((current) => current.map((message) => (
+      message.id === payload.id && message.role === 'tool_call'
+        ? { ...message, args: `${message.args || ''}${payload.delta}` }
+        : message
+    )))
+  }
+
+  const finishToolCall = (payload: LoreToolPayload) => {
+    const id = payload.id
+    if (!id) return
+    setMessages((current) => current.map((message) => (
+      message.id === id && message.role === 'tool_call'
+        ? { ...message, status: 'success', toolResult: payload.content || '' }
+        : message
+    )))
+  }
+
+  const send = async () => {
+    const instruction = value.trim()
+    if (!instruction || running) return
+    if (instruction === '/clear') {
+      setRunning(true)
+      try {
+        await clearInteractiveTellerAgentSession()
+        appendMessage({ role: 'clear', content: '已清理讲述者 Agent 上下文，历史消息仍保留。' })
+        setValue('')
+      } catch (error) {
+        appendMessage({ role: 'error', content: error instanceof Error ? error.message : '讲述者 Agent 上下文清理失败' })
+      } finally {
+        setRunning(false)
+      }
+      return
+    }
+    appendMessage({ role: 'user', content: instruction, targetTeller: effectiveTargetId ? targetTeller || undefined : undefined })
+    setValue('')
+    setRunning(true)
+    try {
+      const stream = await runInteractiveTellerAgentStream(instruction, effectiveTargetId)
+      const reader = stream.getReader()
+      while (true) {
+        const { done, value: event } = await reader.read()
+        if (done) break
+        handleTellerAgentEvent(event)
+      }
+    } catch (error) {
+      appendMessage({ role: 'error', content: error instanceof Error ? error.message : '讲述者 Agent 执行失败' })
+    } finally {
+      setRunning(false)
+      textareaRef.current?.focus()
+    }
+  }
+
+  const handleTellerAgentEvent = (event: SSEEvent) => {
+    if (event.event === 'thinking') {
+      const payload = parseLoreEventData<{ content?: string }>(event.data)
+      appendStreamingMessage('thinking', payload?.content || '')
+      return
+    }
+    if (event.event === 'chunk') {
+      const payload = parseLoreEventData<{ content?: string }>(event.data)
+      appendStreamingMessage('assistant', payload?.content || '')
+      return
+    }
+    if (event.event === 'tool_call') {
+      const payload = parseLoreEventData<LoreToolPayload>(event.data)
+      if (payload) upsertToolCall(payload)
+      return
+    }
+    if (event.event === 'tool_args_delta') {
+      const payload = parseLoreEventData<LoreToolPayload>(event.data)
+      if (payload) appendToolArgs(payload)
+      return
+    }
+    if (event.event === 'tool_result') {
+      const payload = parseLoreEventData<LoreToolPayload>(event.data)
+      if (payload) finishToolCall(payload)
+      return
+    }
+    if (event.event === 'teller_result') {
+      const result = parseLoreEventData<TellerAgentResult>(event.data)
+      if (!result) {
+        appendMessage({ role: 'error', content: '讲述者 Agent 返回结果无法解析' })
+        return
+      }
+      onResult(result)
+      appendMessage({ role: 'assistant', content: tellerAgentResultSummary(result), result })
+      return
+    }
+    if (event.event === 'error') {
+      const payload = parseLoreEventData<{ message?: string }>(event.data)
+      appendMessage({ role: 'error', content: payload?.message || '讲述者 Agent 执行失败' })
+    }
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      void send()
+    }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-[var(--nova-surface-2)]">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--nova-border)] bg-[var(--nova-surface)] px-4">
+        <div className="text-xs text-[var(--nova-text-faint)]">输入 /clear 可清理后续上下文；每次只会创建或修改一个讲述者。</div>
+        <label className="flex items-center gap-2 text-xs text-[var(--nova-text-muted)]">
+          <input
+            type="checkbox"
+            checked={updateCurrent}
+            disabled={!targetTeller || running}
+            onChange={(event) => setUpdateCurrent(event.target.checked)}
+          />
+          修改当前讲述者
+        </label>
+      </div>
+
+      <div className="shrink-0 border-b border-[var(--nova-border)] bg-[var(--nova-surface)] px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-3 py-2 text-xs text-[var(--nova-text-muted)]">
+            {effectiveTargetId && targetTeller ? `本轮将修改「${targetTeller.name}」` : '本轮将创建一个新讲述者'}
+          </div>
+          <Select value={targetTellerId || 'none'} onValueChange={(value) => onTargetTellerIdChange(value === 'none' ? '' : value)}>
+            <SelectTrigger size="sm" className={selectClassName}>
+              <SelectValue placeholder="选择目标讲述者" />
+            </SelectTrigger>
+            <SelectContent className="nova-panel border text-[var(--nova-text)]">
+              <SelectItem value="none">不选择，创建新讲述者</SelectItem>
+              {tellers.map((teller) => (
+                <SelectItem key={teller.id} value={teller.id}>{teller.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {messages.length === 0 ? (
+          <EmptyState title="讲述者 Agent" description="描述你想要的讲述者，或选择目标后让 Agent 修改它。" />
+        ) : (
+          <div className="mx-auto flex max-w-4xl flex-col gap-3">
+            {messages.map((message) => (
+              <TellerAgentMessage key={message.id} message={message} />
+            ))}
+            {running && (
+              <div className="flex items-center gap-2 self-start rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-2 text-xs text-[var(--nova-text-muted)]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Agent 正在处理...
+              </div>
+            )}
+            <div ref={messageEndRef} />
+          </div>
+        )}
+      </div>
+
+      <div className="shrink-0 border-t border-[var(--nova-border)] bg-[var(--nova-surface)] p-4">
+        <div className="mx-auto max-w-4xl">
+          <div className="nova-field flex min-w-0 items-end gap-2 rounded-[var(--nova-radius)] px-3 py-2">
+            <Bot className="mb-2 h-4 w-4 shrink-0 text-[var(--nova-text-faint)]" />
+            <textarea
+              ref={textareaRef}
+              className="max-h-36 min-h-10 min-w-0 flex-1 resize-none bg-transparent text-sm leading-5 text-[var(--nova-text)] outline-none placeholder:text-[var(--nova-text-faint)] disabled:opacity-60"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={running ? '讲述者 Agent 正在执行...' : '输入讲述者创建或修改指令，Enter 发送，Shift+Enter 换行'}
+              rows={2}
+              disabled={running}
+            />
+            <Button className={actionButtonClassName} variant="outline" size="sm" disabled={running || !value.trim()} onClick={() => void send()}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {running ? '执行中...' : '发送'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LoreAgentMessage({ message }: { message: LoreAgentChatMessage }) {
   if (message.role === 'clear') {
     return (
@@ -885,6 +1193,85 @@ function LoreAgentMessage({ message }: { message: LoreAgentChatMessage }) {
             {message.result.created?.length ? <div>新增：{message.result.created.map((item) => item.name).join('，')}</div> : null}
             {message.result.updated?.length ? <div>更新：{message.result.updated.map((item) => item.name).join('，')}</div> : null}
             {message.result.deleted_ids?.length ? <div>删除：{message.result.deleted_ids.join('，')}</div> : null}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TellerAgentMessage({ message }: { message: TellerAgentChatMessage }) {
+  if (message.role === 'clear') {
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-[var(--nova-border)]" />
+        <div className="rounded-full border border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-1 text-[11px] text-[var(--nova-text-faint)]">
+          {message.content || '上下文已清理'}
+        </div>
+        <div className="h-px flex-1 bg-[var(--nova-border)]" />
+      </div>
+    )
+  }
+  if (message.role === 'thinking') {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[78%] rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-2 text-xs leading-5 text-[var(--nova-text-faint)]">
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--nova-text-muted)]">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            思考过程
+          </div>
+          <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        </div>
+      </div>
+    )
+  }
+  if (message.role === 'tool_call') {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[78%] rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-2 text-xs leading-5 text-[var(--nova-text-muted)]">
+          <div className="flex items-center gap-2">
+            {message.status === 'running' ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--nova-text-faint)]" /> : <Bot className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />}
+            <span className="font-medium text-[var(--nova-text)]">{message.name || message.content}</span>
+            <span className="text-[11px] text-[var(--nova-text-faint)]">{message.status === 'running' ? '执行中' : '完成'}</span>
+          </div>
+          {message.args && (
+            <pre className="mt-2 max-h-40 overflow-auto rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] p-2 font-mono text-[11px] leading-4 text-[var(--nova-text-faint)]">
+              {message.args}
+            </pre>
+          )}
+          {message.toolResult && (
+            <div className="mt-2 whitespace-pre-wrap rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2 py-1.5 text-[11px] text-[var(--nova-text-muted)]">
+              {message.toolResult}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+  const isUser = message.role === 'user'
+  const isError = message.role === 'error'
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[78%] rounded-[var(--nova-radius)] border px-3 py-2 text-sm leading-6 ${
+          isUser
+            ? 'border-[var(--nova-active)] bg-[var(--nova-active)] text-[var(--nova-text)]'
+            : isError
+              ? 'border-red-500/40 bg-red-500/10 text-red-100'
+              : 'border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-muted)]'
+        }`}
+      >
+        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        {message.targetTeller && (
+          <div className="mt-2 inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2 py-0.5 text-xs text-[var(--nova-text-muted)]">
+            <SlidersHorizontal className="h-3 w-3 shrink-0 text-[var(--nova-text-faint)]" />
+            <span className="truncate">修改：{message.targetTeller.name}</span>
+          </div>
+        )}
+        {message.result && (
+          <div className="mt-2 space-y-1 border-t border-[var(--nova-border)] pt-2 text-xs text-[var(--nova-text-faint)]">
+            <div>{message.result.action === 'update' ? '更新' : '新增'}：{message.result.teller.name}</div>
+            <div>ID：{message.result.teller.id}</div>
           </div>
         )}
       </div>
@@ -1042,6 +1429,18 @@ function TellerDirectory({
         <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving} onClick={onCreate} aria-label="新建讲述者">
           <Plus className="h-3.5 w-3.5" />
         </Button>
+      </div>
+      <div className="border-b border-[var(--nova-border)] p-2">
+        <button
+          type="button"
+          onClick={() => onSelect(TELLER_AGENT_ENTRY_ID)}
+          className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs transition ${
+            activeTellerId === TELLER_AGENT_ENTRY_ID ? 'is-active bg-[var(--nova-active)] text-[var(--nova-text)]' : 'text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-faint)]" />
+          <span className="min-w-0 flex-1 truncate">讲述者 Agent</span>
+        </button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
@@ -1440,6 +1839,27 @@ function loreReferencesFromContent(content: string, items: LoreItem[]) {
   return items.filter((item) => item.name && content.includes(`@${item.name}`))
 }
 
+function tellerHistoryMessageToChat(message: ChatMessage, index: number, tellers: Teller[]): TellerAgentChatMessage {
+  if (message.type === 'clear') {
+    return {
+      id: `history-clear-${index}`,
+      role: 'clear',
+      content: '已清理讲述者 Agent 上下文，历史消息仍保留。',
+    }
+  }
+  const role = message.role === 'user' ? 'user' : message.role === 'error' ? 'error' : 'assistant'
+  return {
+    id: `history-${index}`,
+    role,
+    content: message.content || '',
+    targetTeller: role === 'user' ? tellerReferenceFromContent(message.content || '', tellers) : undefined,
+  }
+}
+
+function tellerReferenceFromContent(content: string, tellers: Teller[]) {
+  return tellers.find((teller) => teller.name && content.includes(teller.name))
+}
+
 function loreAgentResultSummary(result: LoreAgentResult) {
   const changed = [
     result.created?.length ? `新增 ${result.created.length}` : '',
@@ -1447,6 +1867,11 @@ function loreAgentResultSummary(result: LoreAgentResult) {
     result.deleted_ids?.length ? `删除 ${result.deleted_ids.length}` : '',
   ].filter(Boolean).join('，')
   return `${result.message || '资料库 Agent 已完成'}${changed ? `（${changed}）` : ''}`
+}
+
+function tellerAgentResultSummary(result: TellerAgentResult) {
+  const action = result.action === 'update' ? '更新' : '新增'
+  return `${result.message || '讲述者 Agent 已完成'}（${action}：${result.teller.name}）`
 }
 
 function formatDateTime(value: string) {

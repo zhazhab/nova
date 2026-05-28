@@ -21,7 +21,17 @@ import (
 	"nova/internal/session"
 )
 
-const loreAgentSessionID = "lore-agent"
+const (
+	loreAgentSessionID   = "lore-agent"
+	tellerAgentSessionID = "teller-agent"
+)
+
+type TellerAgentResult struct {
+	Message string               `json:"message"`
+	Action  string               `json:"action"`
+	Teller  interactive.Teller   `json:"teller"`
+	Tellers []interactive.Teller `json:"tellers"`
+}
 
 // App 管理 Nova 后端运行时依赖和 workspace 热切换。
 type App struct {
@@ -352,6 +362,34 @@ func (a *App) ClearLoreAgentSession() error {
 	return sess.Clear()
 }
 
+func (a *App) TellerAgentMessages() ([]session.HistoryEntry, error) {
+	a.mu.RLock()
+	store := a.sessionStore
+	a.mu.RUnlock()
+	if store == nil {
+		return nil, ErrNoWorkspace
+	}
+	sess, err := store.GetOrCreate(tellerAgentSessionID)
+	if err != nil {
+		return nil, err
+	}
+	return sess.History(), nil
+}
+
+func (a *App) ClearTellerAgentSession() error {
+	a.mu.RLock()
+	store := a.sessionStore
+	a.mu.RUnlock()
+	if store == nil {
+		return ErrNoWorkspace
+	}
+	sess, err := store.GetOrCreate(tellerAgentSessionID)
+	if err != nil {
+		return err
+	}
+	return sess.Clear()
+}
+
 func (a *App) StartLoreAgentTask(instruction string, references []string) *Task {
 	a.mu.RLock()
 	state := a.bookState
@@ -407,6 +445,96 @@ func (a *App) StartLoreAgentTask(instruction string, references []string) *Task 
 	})
 }
 
+func (a *App) StartTellerAgentTask(instruction string, targetID string) *Task {
+	a.mu.RLock()
+	cfg := a.cfg
+	sessionStore := a.sessionStore
+	a.mu.RUnlock()
+	if cfg == nil || cfg.NovaDir == "" || sessionStore == nil {
+		return nil
+	}
+	runtimeCfg := *cfg
+	library := interactive.NewTellerLibrary(runtimeCfg.NovaDir)
+	targetID = strings.TrimSpace(targetID)
+	sess, err := sessionStore.GetOrCreate(tellerAgentSessionID)
+	if err != nil {
+		log.Printf("[teller-agent-task] 加载会话失败 err=%v", err)
+		return nil
+	}
+	history := sess.GetEffectiveMessages()
+
+	return NewTask(func(ctx context.Context, task *Task, emit func(agent.Event)) {
+		instruction = strings.TrimSpace(instruction)
+		if err := sess.Append(schema.UserMessage(instruction)); err != nil {
+			emit(agent.Event{Type: "error", Data: map[string]string{"message": err.Error()}})
+			return
+		}
+		log.Printf("[teller-agent-task] run begin id=%s target_id=%s instruction_len=%d", task.ID(), targetID, len(instruction))
+		if err := rejectUnsupportedTellerAgentInstruction(instruction); err != nil {
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 拒绝不支持的指令 target_id=%s err=%v", targetID, err)
+			return
+		}
+
+		emitLoreToolCall(emit, "teller-read", "读取讲述者配置", fmt.Sprintf(`{"target_id":%q}`, targetID))
+		tellers, err := library.List()
+		if err != nil {
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 读取讲述者失败 target_id=%s err=%v", targetID, err)
+			return
+		}
+		if targetID != "" && !tellerExists(tellers, targetID) {
+			err := fmt.Errorf("目标讲述者不存在: %s", targetID)
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 目标讲述者不存在 target_id=%s", targetID)
+			return
+		}
+		emitLoreToolResult(emit, "teller-read", fmt.Sprintf("已读取讲述者配置，共 %d 个。", len(tellers)))
+
+		mode := "create"
+		if targetID != "" {
+			mode = "update"
+		}
+		emitLoreToolCall(emit, "teller-plan", "生成讲述者编辑方案", fmt.Sprintf(`{"mode":%q,"target_id":%q,"history_messages":%d}`, mode, targetID, len(history)))
+		plan, err := agent.StreamTellerEditPlan(ctx, &runtimeCfg, instruction, tellers, targetID, history, emit)
+		if err != nil {
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 生成编辑方案失败 target_id=%s err=%v", targetID, err)
+			return
+		}
+		emitLoreToolResult(emit, "teller-plan", fmt.Sprintf("已生成 %s 方案：%s。", plan.Action, plan.Message))
+
+		emitLoreToolCall(emit, "teller-apply", "应用讲述者变更", fmt.Sprintf(`{"action":%q,"target_id":%q}`, plan.Action, targetID))
+		var teller interactive.Teller
+		if plan.Action == "create" {
+			teller, err = library.Create(plan.Teller)
+		} else {
+			teller, err = library.Update(targetID, plan.Teller)
+		}
+		if err != nil {
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 应用变更失败 action=%s target_id=%s err=%v", plan.Action, targetID, err)
+			return
+		}
+		nextTellers, err := library.List()
+		if err != nil {
+			emitTellerError(sess, emit, err)
+			log.Printf("[teller-agent-task] 刷新讲述者列表失败 action=%s teller_id=%s err=%v", plan.Action, teller.ID, err)
+			return
+		}
+		result := TellerAgentResult{
+			Message: plan.Message,
+			Action:  plan.Action,
+			Teller:  teller,
+			Tellers: nextTellers,
+		}
+		emitLoreToolResult(emit, "teller-apply", tellerResultMessage(result))
+		_ = sess.Append(schema.AssistantMessage(tellerResultMessage(result), nil))
+		emit(agent.Event{Type: "teller_result", Data: result})
+		log.Printf("[teller-agent-task] run done id=%s action=%s teller_id=%s tellers=%d", task.ID(), plan.Action, teller.ID, len(nextTellers))
+	})
+}
+
 func emitLoreToolCall(emit func(agent.Event), id, name, args string) {
 	emit(agent.Event{Type: "tool_call", Data: map[string]any{
 		"id":   id,
@@ -423,6 +551,12 @@ func emitLoreToolResult(emit func(agent.Event), id, content string) {
 }
 
 func emitLoreError(sess *session.Session, emit func(agent.Event), err error) {
+	message := err.Error()
+	_ = sess.Append(schema.AssistantMessage("执行失败："+message, nil))
+	emit(agent.Event{Type: "error", Data: map[string]string{"message": message}})
+}
+
+func emitTellerError(sess *session.Session, emit func(agent.Event), err error) {
 	message := err.Error()
 	_ = sess.Append(schema.AssistantMessage("执行失败："+message, nil))
 	emit(agent.Event{Type: "error", Data: map[string]string{"message": message}})
@@ -456,6 +590,47 @@ func loreResultMessage(result book.LoreApplyResult) string {
 		message += "\n删除：" + strings.Join(result.DeletedIDs, "，")
 	}
 	return message
+}
+
+func tellerResultMessage(result TellerAgentResult) string {
+	action := "创建"
+	if result.Action == "update" {
+		action = "修改"
+	}
+	message := strings.TrimSpace(result.Message)
+	if message == "" {
+		message = "讲述者 Agent 已完成"
+	}
+	if result.Teller.Name != "" {
+		message += fmt.Sprintf("（%s：%s）", action, result.Teller.Name)
+	}
+	return message
+}
+
+func tellerExists(tellers []interactive.Teller, id string) bool {
+	for _, teller := range tellers {
+		if teller.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func rejectUnsupportedTellerAgentInstruction(instruction string) error {
+	normalized := strings.ToLower(strings.TrimSpace(instruction))
+	deleteWords := []string{"删除", "删掉", "移除", "remove", "delete"}
+	tellerWords := []string{"讲述者", "story teller", "teller", "规则包"}
+	for _, deleteWord := range deleteWords {
+		if !strings.Contains(normalized, deleteWord) {
+			continue
+		}
+		for _, tellerWord := range tellerWords {
+			if strings.Contains(normalized, tellerWord) {
+				return fmt.Errorf("讲述者 Agent 当前只支持创建或修改单个讲述者，不支持删除")
+			}
+		}
+	}
+	return nil
 }
 
 func loreItemNames(items []book.LoreItem) string {

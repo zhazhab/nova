@@ -1,3 +1,4 @@
+import type { ChatMessage } from '@/lib/api'
 import type { BranchSummary, InteractiveSSEEvent, Snapshot, StoryIndex, StorySummary, Teller } from './types'
 
 async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -59,6 +60,34 @@ export function updateInteractiveTeller(id: string, input: Partial<Teller>): Pro
 
 export function deleteInteractiveTeller(id: string): Promise<void> {
   return requestJSON(`/api/interactive/tellers/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function runInteractiveTellerAgentStream(instruction: string, tellerId = ''): Promise<ReadableStream<InteractiveSSEEvent>> {
+  const res = await fetch('/api/interactive/tellers/agent/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction, teller_id: tellerId }),
+  })
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`
+    try {
+      const data = await res.json()
+      message = data.error || message
+    } catch {
+      // keep HTTP fallback
+    }
+    throw new Error(message)
+  }
+  if (!res.body) throw new Error('No response body')
+  return parseSSEStream(res.body)
+}
+
+export function getInteractiveTellerAgentMessages(): Promise<ChatMessage[]> {
+  return requestJSON('/api/interactive/tellers/agent/messages')
+}
+
+export async function clearInteractiveTellerAgentSession(): Promise<void> {
+  await requestJSON('/api/interactive/tellers/agent/clear', { method: 'POST' })
 }
 
 export async function getInteractiveBranches(storyId: string): Promise<BranchSummary[]> {

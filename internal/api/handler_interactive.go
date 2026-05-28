@@ -11,6 +11,11 @@ import (
 	"nova/internal/interactive"
 )
 
+type tellerAgentRequest struct {
+	Instruction string `json:"instruction"`
+	TellerID    string `json:"teller_id"`
+}
+
 func (s *Server) handleInteractiveStories(ctx context.Context, c *app.RequestContext) {
 	index, err := s.app.InteractiveStories()
 	if err != nil {
@@ -201,6 +206,66 @@ func (s *Server) handleInteractiveTellerUpdate(ctx context.Context, c *app.Reque
 func (s *Server) handleInteractiveTellerDelete(ctx context.Context, c *app.RequestContext) {
 	if err := s.app.DeleteInteractiveTeller(c.Param("id")); err != nil {
 		writeError(c, consts.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(c, consts.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleInteractiveTellerAgentStream(ctx context.Context, c *app.RequestContext) {
+	var body tellerAgentRequest
+	if err := c.BindJSON(&body); err != nil {
+		writeError(c, consts.StatusBadRequest, "请求参数无效: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(body.Instruction) == "" {
+		writeError(c, consts.StatusBadRequest, "讲述者编辑指令不能为空")
+		return
+	}
+	task := s.app.StartTellerAgentTask(body.Instruction, body.TellerID)
+	if task == nil {
+		writeError(c, consts.StatusConflict, "尚未选择书籍工作区，请先在书籍管理页选择或创建书籍")
+		return
+	}
+	streamTask(c, task)
+}
+
+func (s *Server) handleInteractiveTellerAgentMessages(ctx context.Context, c *app.RequestContext) {
+	if !s.app.HasWorkspace() {
+		writeJSON(c, consts.StatusOK, []messageDTO{})
+		return
+	}
+	entries, err := s.app.TellerAgentMessages()
+	if err != nil {
+		writeError(c, consts.StatusInternalServerError, err.Error())
+		return
+	}
+	result := make([]messageDTO, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type == "clear" {
+			result = append(result, messageDTO{
+				Type:      entry.Type,
+				CreatedAt: formatTime(entry.CreatedAt),
+			})
+			continue
+		}
+		if entry.Content == "" {
+			continue
+		}
+		result = append(result, messageDTO{
+			Type:    entry.Type,
+			Role:    entry.Role,
+			Content: entry.Content,
+		})
+	}
+	writeJSON(c, consts.StatusOK, result)
+}
+
+func (s *Server) handleInteractiveTellerAgentClear(ctx context.Context, c *app.RequestContext) {
+	if !s.requireWorkspace(c) {
+		return
+	}
+	if err := s.app.ClearTellerAgentSession(); err != nil {
+		writeError(c, consts.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(c, consts.StatusOK, map[string]string{"status": "ok"})

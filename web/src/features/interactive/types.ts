@@ -49,6 +49,13 @@ export interface TellerPromptSlot {
   content: string
 }
 
+export interface TellerAgentResult {
+  message: string
+  action: 'create' | 'update'
+  teller: Teller
+  tellers: Teller[]
+}
+
 export interface TurnEvent {
   id: string
   parent_id: string | null
