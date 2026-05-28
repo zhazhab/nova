@@ -4,14 +4,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import type { BranchSummary, PlotNode, Snapshot } from '../types'
+import type { BranchSummary, PlotNode, Snapshot, TurnEvent } from '../types'
 
 interface BranchTimelineProps {
   snapshot: Snapshot | null
   branches: BranchSummary[]
   currentBranchId: string
   onSwitchBranch: (branchId: string) => void
-  onCreateBranch: (turnId: string, title: string) => void
+  onCreateBranch: (turnId: string, title: string) => void | Promise<void>
   onDeleteBranch: (branchId: string) => void
   expanded?: boolean
   fill?: boolean
@@ -45,6 +45,7 @@ interface EmptyBranchMarker {
   x: number
   y: number
   color: string
+  colorSoft: string
   from?: PositionedNode
 }
 
@@ -56,25 +57,40 @@ interface GraphLayout {
   emptyBranches: EmptyBranchMarker[]
   width: number
   height: number
+  metrics: GraphMetrics
 }
 
-const COLUMN_WIDTH = 250
-const LANE_HEIGHT = 82
-const NODE_CARD_WIDTH = 188
-const NODE_DOT_X = 18
-const NODE_CENTER_Y = 24
-const GRAPH_LEFT = 40
-const GRAPH_TOP = 36
-const GRAPH_RIGHT = 84
-const GRAPH_BOTTOM = 34
+interface GraphMetrics {
+  columnWidth: number
+  laneHeight: number
+  nodeCardWidth: number
+  nodeDotX: number
+  nodeCenterY: number
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+const DEFAULT_GRAPH_METRICS: GraphMetrics = {
+  columnWidth: 220,
+  laneHeight: 64,
+  nodeCardWidth: 176,
+  nodeDotX: 18,
+  nodeCenterY: 21,
+  left: 32,
+  top: 26,
+  right: 72,
+  bottom: 24,
+}
 
 const BRANCH_COLORS = [
-  { color: '#5fa8ff', soft: 'rgba(95,168,255,0.14)' },
-  { color: '#f05260', soft: 'rgba(240,82,96,0.14)' },
-  { color: '#59c178', soft: 'rgba(89,193,120,0.14)' },
-  { color: '#d8a84f', soft: 'rgba(216,168,79,0.15)' },
-  { color: '#22c7d6', soft: 'rgba(34,199,214,0.14)' },
-  { color: '#a78bfa', soft: 'rgba(167,139,250,0.14)' },
+  { color: '#7fa7d9', soft: 'rgba(127,167,217,0.14)' },
+  { color: '#d6aa62', soft: 'rgba(214,170,98,0.14)' },
+  { color: '#81b38d', soft: 'rgba(129,179,141,0.14)' },
+  { color: '#c98c8c', soft: 'rgba(201,140,140,0.14)' },
+  { color: '#a795d8', soft: 'rgba(167,149,216,0.14)' },
+  { color: '#72b8b7', soft: 'rgba(114,184,183,0.14)' },
 ]
 
 export function BranchTimeline({
@@ -90,17 +106,25 @@ export function BranchTimeline({
 }: BranchTimelineProps) {
   const [internalExpanded, setInternalExpanded] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedNodeSnapshot, setSelectedNodeSnapshot] = useState<PlotNode | null>(null)
+  const [branchSourceNode, setBranchSourceNode] = useState<PlotNode | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [branchTitle, setBranchTitle] = useState('')
+  const [creatingBranch, setCreatingBranch] = useState(false)
+  const [createError, setCreateError] = useState('')
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  useDragScroll(scrollRef)
 
-  const graphNodes = snapshot?.graph?.nodes || []
-  const graphBranches = snapshot?.graph?.branches?.length ? snapshot.graph.branches : branches
-  const selectedNode = graphNodes.find((node) => node.id === selectedNodeId) || null
+  const graphNodes = useMemo(() => buildGraphNodes(snapshot), [snapshot])
+  const graphBranches = useMemo(() => buildGraphBranches(snapshot, branches, graphNodes), [branches, graphNodes, snapshot])
+  const selectedNode = graphNodes.find((node) => node.id === selectedNodeId) ||
+    (selectedNodeSnapshot?.id === selectedNodeId ? selectedNodeSnapshot : null)
+  const createSourceNode = branchSourceNode || selectedNode
   const expanded = controlledExpanded ?? internalExpanded
+  const scrollSize = useElementSize(scrollRef, expanded)
+  useDragScroll(scrollRef, expanded)
   const emptyBranchCount = graphBranches.filter((branch) => isEmptyBranch(branch, graphNodes)).length
-  const layout = useMemo(() => buildGraphLayout(graphNodes, graphBranches), [graphBranches, graphNodes])
+  const metrics = useMemo(() => buildGraphMetrics(scrollSize.width), [scrollSize.width])
+  const layout = useMemo(() => buildGraphLayout(graphNodes, graphBranches, metrics, scrollSize), [graphBranches, graphNodes, metrics, scrollSize])
 
   const currentPositionedNode = useMemo(() => {
     const branchHead = graphBranches.find((branch) => branch.id === currentBranchId)?.head
@@ -127,20 +151,41 @@ export function BranchTimeline({
 
   const selectNode = useCallback((node: PlotNode) => {
     setSelectedNodeId(node.id)
+    setSelectedNodeSnapshot(node)
     if (node.branch_id !== currentBranchId) onSwitchBranch(node.branch_id)
   }, [currentBranchId, onSwitchBranch])
 
   const openCreateDialog = () => {
     if (!selectedNode) return
+    setBranchSourceNode(selectedNode)
     setBranchTitle(`基于「${selectedNode.title}」的新剧情线`)
+    setCreateError('')
     setCreateDialogOpen(true)
   }
 
-  const submitCreateBranch = () => {
-    if (!selectedNode) return
-    onCreateBranch(selectedNode.id, branchTitle.trim() || '新剧情线')
-    setCreateDialogOpen(false)
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    if (creatingBranch) return
+    setCreateDialogOpen(open)
+    if (open) return
+    setBranchSourceNode(null)
     setBranchTitle('')
+    setCreateError('')
+  }
+
+  const submitCreateBranch = async () => {
+    if (!createSourceNode || creatingBranch) return
+    setCreatingBranch(true)
+    setCreateError('')
+    try {
+      await onCreateBranch(createSourceNode.id, branchTitle.trim() || '新剧情线')
+      setCreateDialogOpen(false)
+      setBranchSourceNode(null)
+      setBranchTitle('')
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : '创建剧情线失败')
+    } finally {
+      setCreatingBranch(false)
+    }
   }
 
   const deleteBranch = (branch: BranchSummary) => {
@@ -151,10 +196,10 @@ export function BranchTimeline({
   }
 
   return (
-    <div className={`${fill ? 'h-full min-h-0' : expanded ? 'h-[min(430px,calc(100vh-96px))] min-h-[320px]' : 'h-[52px]'} border-t border-[#2f3540] bg-[#14171c] px-3 py-3 transition-[height] sm:px-4`}>
+    <div className={`${fill ? 'h-full min-h-0' : expanded ? 'h-[min(260px,calc(100vh-96px))] min-h-[180px]' : 'h-[48px]'} border-t border-[#303238] bg-[#1f2023] px-3 py-2 transition-[height] sm:px-4`}>
       <div className="flex items-center justify-between gap-2 text-xs text-[#858b96]">
         <button type="button" className="flex items-center gap-1.5 font-medium text-[#c3cad6] hover:text-[#edf2fa]" onClick={() => setExpanded(!expanded)}>
-          <GitBranch className="h-3.5 w-3.5 text-[#5fa8ff]" />
+          <GitBranch className="h-3.5 w-3.5 text-[#7fa7d9]" />
           剧情路线图
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
         </button>
@@ -162,7 +207,7 @@ export function BranchTimeline({
           <span className="truncate text-[#737d8d]">{graphNodes.length || snapshot?.turns?.length || 0} 个剧情节点</span>
           {emptyBranchCount > 0 && <Badge variant="outline" className="hidden border-[#4a3d2f] bg-[#282119] text-[#d5aa72] sm:inline-flex">{emptyBranchCount} 条空剧情线</Badge>}
           {selectedNode && (
-            <Button variant="outline" size="xs" className="hidden gap-1.5 border-[#3a414d] bg-[#20242b] text-[#c3cbd7] hover:bg-[#252c38] sm:inline-flex" onClick={openCreateDialog}>
+            <Button variant="outline" size="xs" className="hidden gap-1.5 border-[#303238] bg-[#25262a] text-[#c3cbd7] hover:bg-[#303238] sm:inline-flex" onClick={openCreateDialog}>
               <Plus className="h-3.5 w-3.5" />
               从选中节点创建
             </Button>
@@ -171,18 +216,19 @@ export function BranchTimeline({
       </div>
 
       {expanded && (
-        <div className="mt-3 flex h-[calc(100%-40px)] min-h-0 flex-col overflow-hidden rounded-lg border border-[#2d3440] bg-[#10141b] shadow-[0_18px_42px_rgba(0,0,0,0.30),inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#29313c] bg-[#171c25]/95 px-3 py-2 backdrop-blur sm:px-4">
+        <div className="mt-2 flex h-[calc(100%-32px)] min-h-0 flex-col overflow-hidden rounded-md border border-[#303238] bg-[#1b1c1f] shadow-[0_12px_28px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#303238] bg-[#202124]/95 px-3 py-1.5 backdrop-blur sm:px-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
               {layout.rows.map((row) => (
                 <button
                   key={row.branchId}
                   type="button"
-                  className={`flex h-7 shrink-0 items-center gap-2 rounded-md border px-2 text-xs transition ${row.branchId === currentBranchId ? 'border-[#5fa8ff]/60 bg-[#1d3552] text-[#eaf4ff]' : 'border-[#303946] bg-[#111720] text-[#9aa4b5] hover:border-[#4b596c] hover:text-[#d6dce6]'}`}
+                  className={`flex h-7 shrink-0 items-center gap-2 rounded-md border px-2 text-xs transition ${row.branchId === currentBranchId ? 'border-[#5a5d64] bg-[#303238] text-[#f0f2f5]' : 'border-[#303238] bg-[#1b1c1f] text-[#9aa4b5] hover:border-[#4a4d54] hover:text-[#d6dce6]'}`}
+                  style={row.branchId === currentBranchId ? { borderColor: row.color, background: row.colorSoft } : undefined}
                   onClick={() => onSwitchBranch(row.branchId)}
                   title={formatBranchName(row.branch)}
                 >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: row.color }} />
+                  <span className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor]" style={{ background: row.color, color: row.color }} />
                   <span className="max-w-32 truncate">{formatBranchName(row.branch)}</span>
                   <span className="text-[#7e8898]">{row.nodes.length}</span>
                 </button>
@@ -194,14 +240,14 @@ export function BranchTimeline({
                 <Move className="h-3.5 w-3.5" />
                 拖动或滚轮浏览
               </span>
-              <Button size="xs" variant="outline" className="gap-1.5 border-[#354051] bg-[#1a202b] text-[#c4ccd8] hover:bg-[#242b38]" disabled={!selectedNode} onClick={openCreateDialog}>
-                <Plus className="h-3.5 w-3.5 text-[#d8b35f]" />
+              <Button size="xs" variant="outline" className="gap-1.5 border-[#303238] bg-[#25262a] text-[#c4ccd8] hover:bg-[#303238]" disabled={!selectedNode} onClick={openCreateDialog}>
+                <Plus className="h-3.5 w-3.5 text-[#aeb4bf]" />
                 创建剧情线
               </Button>
             </div>
           </div>
 
-          <div ref={scrollRef} className="min-h-0 flex-1 cursor-grab overflow-auto bg-[#0f131a] active:cursor-grabbing" data-testid="branch-graph-scroll">
+          <div ref={scrollRef} className="min-h-0 flex-1 cursor-grab select-none overflow-auto overscroll-contain bg-[#1b1c1f] touch-none active:cursor-grabbing" data-testid="branch-graph-scroll">
             <div
               data-testid="branch-graph-canvas"
               data-edge-count={layout.connections.length}
@@ -213,7 +259,7 @@ export function BranchTimeline({
                 {layout.connections.map((connection) => (
                   <path
                     key={`${connection.from.node.id}-${'node' in connection.to ? connection.to.node.id : connection.to.branch.id}`}
-                    d={connectionPath(connection.from, connection.to)}
+                    d={connectionPath(connection.from, connection.to, layout.metrics)}
                     fill="none"
                     stroke={connection.color}
                     strokeWidth={connection.branchChanged ? 2.6 : 2}
@@ -229,8 +275,18 @@ export function BranchTimeline({
                 <button
                   key={node.id}
                   type="button"
-                  className={`absolute z-10 flex h-[48px] cursor-grab items-start gap-2 rounded-lg border px-3 py-2 text-left shadow-[0_10px_22px_rgba(0,0,0,0.22)] backdrop-blur transition active:cursor-grabbing ${node.id === selectedNodeId ? 'border-[#f0cf8b] text-[#fff1ce] ring-2 ring-[#f0cf8b]/25' : node.current ? 'border-[#5fa8ff] text-[#eaf4ff]' : 'border-[#3a4656] text-[#c4ccd8] hover:border-[#74849a]'}`}
-                  style={{ left: x, top: y, width: NODE_CARD_WIDTH, background: node.id === selectedNodeId ? 'rgba(64,48,28,0.96)' : colorSoft }}
+                  data-no-drag
+                  className={`absolute z-10 flex h-[42px] cursor-pointer items-start gap-2 rounded-md border px-3 py-1.5 text-left shadow-[0_8px_18px_rgba(0,0,0,0.20)] backdrop-blur transition ${node.id === selectedNodeId ? 'border-[#c8ccd4] text-[#f3f4f6] ring-2 ring-[#c8ccd4]/18' : node.current ? 'border-[#aeb4bf] text-[#f0f2f5]' : 'border-[#3a3d44] text-[#c4ccd8] hover:border-[#737985]'}`}
+                  style={{
+                    left: x,
+                    top: y,
+                    width: layout.metrics.nodeCardWidth,
+                    background: node.id === selectedNodeId ? `linear-gradient(180deg, rgba(48,50,56,0.96), ${colorSoft})` : colorSoft,
+                    borderColor: node.id === selectedNodeId || node.current ? color : undefined,
+                    boxShadow: node.id === selectedNodeId
+                      ? `0 10px 24px rgba(0,0,0,0.28), 0 0 0 1px ${color}33`
+                      : undefined,
+                  }}
                   onClick={() => selectNode(node)}
                   title={`${node.title}\n${node.summary}`}
                 >
@@ -239,7 +295,7 @@ export function BranchTimeline({
                     <span className="block truncate text-[12px] font-medium">{node.title}</span>
                     <span className="mt-0.5 block truncate text-[11px] text-[#8e98a8]">{node.summary || '剧情节点'}</span>
                   </span>
-                  {node.head && <Badge variant="outline" className="h-5 border-[#425065] bg-[#1b2430] px-1.5 text-[10px] text-[#aeb8c8]">HEAD</Badge>}
+                  {node.head && <Badge variant="outline" className="h-5 border-[#303238] bg-[#25262a] px-1.5 text-[10px] text-[#aeb8c8]">HEAD</Badge>}
                 </button>
               ))}
 
@@ -247,12 +303,13 @@ export function BranchTimeline({
                 <div
                   key={empty.branch.id}
                   className="absolute z-10 flex h-[38px] cursor-grab items-center gap-2 rounded-lg border border-dashed px-3 text-xs text-[#b7beca] active:cursor-grabbing"
-                  style={{ left: empty.x, top: empty.y + 5, width: NODE_CARD_WIDTH, borderColor: empty.color, background: 'rgba(21,25,34,0.88)' }}
+                  style={{ left: empty.x, top: empty.y + 5, width: layout.metrics.nodeCardWidth, borderColor: empty.color, background: empty.colorSoft }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: empty.color }} />
                   <span className="min-w-0 flex-1 truncate" title={formatBranchName(empty.branch)}>空剧情线</span>
                   <button
                     type="button"
+                    data-no-drag
                     className="rounded p-1 text-[#9d6673] hover:bg-[#3a2028] hover:text-[#ff9aaa]"
                     onClick={() => deleteBranch(empty.branch)}
                     aria-label={`删除空剧情线 ${formatBranchName(empty.branch)}`}
@@ -267,7 +324,7 @@ export function BranchTimeline({
             </div>
           </div>
 
-          <div className="flex min-h-[64px] shrink-0 items-center justify-between gap-3 border-t border-[#29313c] bg-[#161b24] px-3 text-xs text-[#818b9b] sm:px-4">
+          <div className="flex min-h-[48px] shrink-0 items-center justify-between gap-3 border-t border-[#303238] bg-[#202124] px-3 text-xs text-[#818b9b] sm:px-4">
             {selectedNode ? (
               <div className="min-w-0">
                 <span className="text-[#d6dbe5]">已选节点：</span>
@@ -278,7 +335,7 @@ export function BranchTimeline({
             )}
             <MiniMap layout={layout} scrollRef={scrollRef} />
             {selectedNode && (
-              <Button size="xs" className="shrink-0 gap-1.5 bg-[#2d6fb8] hover:bg-[#347dca]" onClick={openCreateDialog}>
+              <Button size="xs" className="shrink-0 gap-1.5 bg-[#3a3d44] text-white hover:bg-[#4a4d54]" onClick={openCreateDialog}>
                 <Plus className="h-3.5 w-3.5" />
                 创建剧情线
               </Button>
@@ -287,23 +344,24 @@ export function BranchTimeline({
         </div>
       )}
 
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <DialogContent className="border-[#303238] bg-[#202329] text-[#d7dbe2]">
           <DialogHeader>
             <DialogTitle>从选中节点创建剧情线</DialogTitle>
             <DialogDescription className="text-[#9aa4b5]">
-              {selectedNode ? `将从「${selectedNode.title}」分叉，创建后故事舞台会切换到新剧情线。` : ''}
+              {createSourceNode ? `将从「${createSourceNode.title}」分叉，创建后故事舞台会切换到新剧情线。` : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Input className="border-[#3a3d45] bg-[#17191d] text-sm" value={branchTitle} onChange={(event) => setBranchTitle(event.target.value)} placeholder="剧情线名称" />
-            {selectedNode?.summary && <div className="rounded-md border border-[#303743] bg-[#17191d] p-2 text-xs leading-5 text-[#aab2c0]">{selectedNode.summary}</div>}
+            {createSourceNode?.summary && <div className="rounded-md border border-[#303238] bg-[#1b1c1f] p-2 text-xs leading-5 text-[#aab2c0]">{createSourceNode.summary}</div>}
+            {createError && <div className="rounded-md border border-[#6a3535] bg-[#2c1b1b] p-2 text-xs text-[#df8d8d]">{createError}</div>}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setCreateDialogOpen(false)}>取消</Button>
-            <Button className="gap-1.5 bg-[#2d6fb8] hover:bg-[#347dca]" onClick={submitCreateBranch}>
+            <Button variant="ghost" onClick={() => handleCreateDialogOpenChange(false)} disabled={creatingBranch}>取消</Button>
+            <Button className="gap-1.5 bg-[#3a3d44] text-white hover:bg-[#4a4d54]" onClick={submitCreateBranch} disabled={!createSourceNode || creatingBranch}>
               <Plus className="h-4 w-4" />
-              创建并切换
+              {creatingBranch ? '创建中...' : '创建并切换'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -356,7 +414,7 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
 
   return (
     <div
-      className="relative hidden h-12 min-w-[180px] flex-1 overflow-hidden rounded-lg border border-[#2b3340] bg-[#10151d] sm:block"
+      className="group relative hidden h-10 min-w-[220px] max-w-[380px] flex-1 cursor-crosshair overflow-hidden rounded-md border border-[#34373d] bg-[#17181b] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_22px_rgba(0,0,0,0.20)] sm:block"
       onPointerDown={(event) => {
         draggingRef.current = true
         event.currentTarget.setPointerCapture(event.pointerId)
@@ -374,25 +432,47 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
       }}
       aria-label="剧情路线图缩略导航"
     >
-      <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${layout.width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0)_42%),radial-gradient(circle_at_50%_0%,rgba(180,184,192,0.12),transparent_62%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#f4f4f5]/10" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#17181b] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#17181b] to-transparent" />
+      <svg className="absolute inset-0 h-full w-full px-2 py-1.5" viewBox={`0 0 ${layout.width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <filter id="nova-minimap-soft-glow" x="-20%" y="-80%" width="140%" height="260%">
+            <feGaussianBlur stdDeviation="1.6" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
         {layout.connections.map((connection) => (
           <path
             key={`mini-${connection.from.node.id}-${'node' in connection.to ? connection.to.node.id : connection.to.branch.id}`}
-            d={connectionPath(connection.from, connection.to)}
+            d={connectionPath(connection.from, connection.to, layout.metrics)}
             fill="none"
             stroke={connection.color}
-            strokeWidth={6}
+            strokeWidth={connection.branchChanged ? 5 : 4}
+            strokeDasharray={connection.dashed ? '10 12' : undefined}
             strokeLinecap="round"
             strokeLinejoin="round"
-            opacity={connection.dashed ? 0.32 : 0.55}
+            opacity={connection.dashed ? 0.18 : 0.34}
           />
         ))}
         {layout.positionedNodes.map((item) => (
-          <circle key={`mini-node-${item.node.id}`} cx={item.x + NODE_DOT_X} cy={item.y + NODE_CENTER_Y} r={5} fill={item.color} opacity={0.85} />
+          <circle
+            key={`mini-node-${item.node.id}`}
+            cx={item.x + layout.metrics.nodeDotX}
+            cy={item.y + layout.metrics.nodeCenterY}
+            r={item.node.current || item.node.head ? 6 : 4.5}
+            fill={item.node.current ? '#f4f4f5' : item.color}
+            opacity={item.node.current ? 0.95 : 0.62}
+            filter={item.node.current ? 'url(#nova-minimap-soft-glow)' : undefined}
+          />
         ))}
       </svg>
       <div
-        className="absolute rounded border border-[#a8c7ff] bg-[#89b4ff]/10 shadow-[0_0_18px_rgba(137,180,255,0.25)]"
+        className="absolute rounded-[5px] border border-[#d4d7dd]/70 bg-[#d4d7dd]/12 shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_0_18px_rgba(212,215,221,0.16),inset_0_1px_0_rgba(255,255,255,0.22)] transition-all duration-150 group-active:duration-0"
         style={{
           left: `${viewport.left}%`,
           top: `${viewport.top}%`,
@@ -400,11 +480,35 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
           height: `${viewport.height}%`,
         }}
       />
+      <div className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-black/30" />
     </div>
   )
 }
 
-function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLayout {
+function buildGraphMetrics(viewportWidth: number): GraphMetrics {
+  if (viewportWidth > 0 && viewportWidth < 640) {
+    const nodeCardWidth = Math.max(152, Math.min(DEFAULT_GRAPH_METRICS.nodeCardWidth, viewportWidth - 72))
+    return {
+      columnWidth: Math.max(nodeCardWidth + 26, 190),
+      laneHeight: 76,
+      nodeCardWidth,
+      nodeDotX: 18,
+      nodeCenterY: 24,
+      left: 24,
+      top: 28,
+      right: 28,
+      bottom: 28,
+    }
+  }
+
+  if (viewportWidth >= 1180) {
+    return { ...DEFAULT_GRAPH_METRICS, columnWidth: 270, right: 112 }
+  }
+
+  return DEFAULT_GRAPH_METRICS
+}
+
+function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[], metrics: GraphMetrics = DEFAULT_GRAPH_METRICS, viewport = { width: 0, height: 0 }): GraphLayout {
   const columnById = buildNodeColumns(nodes)
   const rowsByBranch = new Map<string, TimelineRow>()
 
@@ -460,8 +564,8 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
         node,
         row: rowIndex,
         column,
-        x: GRAPH_LEFT + column * COLUMN_WIDTH,
-        y: GRAPH_TOP + rowIndex * LANE_HEIGHT,
+        x: metrics.left + column * metrics.columnWidth,
+        y: metrics.top + rowIndex * metrics.laneHeight,
         color: row.color,
         colorSoft: row.colorSoft,
       }
@@ -498,9 +602,10 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
       branch: row.branch,
       row: rowIndex,
       column,
-      x: GRAPH_LEFT + column * COLUMN_WIDTH,
-      y: GRAPH_TOP + rowIndex * LANE_HEIGHT,
+      x: metrics.left + column * metrics.columnWidth,
+      y: metrics.top + rowIndex * metrics.laneHeight,
       color: row.color,
+      colorSoft: row.colorSoft,
       from: row.branch.from_event ? nodeById.get(row.branch.from_event) : undefined,
     }]
   })
@@ -515,16 +620,17 @@ function buildGraphLayout(nodes: PlotNode[], branches: BranchSummary[]): GraphLa
     nodeById,
     connections,
     emptyBranches,
-    width: Math.max(900, GRAPH_LEFT + GRAPH_RIGHT + (maxColumn + 1) * COLUMN_WIDTH + NODE_CARD_WIDTH),
-    height: Math.max(220, GRAPH_TOP + GRAPH_BOTTOM + rows.length * LANE_HEIGHT),
+    width: Math.max(viewport.width || 0, metrics.left + metrics.right + (maxColumn + 1) * metrics.columnWidth + metrics.nodeCardWidth),
+    height: Math.max(viewport.height || 0, 180, metrics.top + metrics.bottom + rows.length * metrics.laneHeight),
+    metrics,
   }
 }
 
-function connectionPath(from: Pick<PositionedNode, 'x' | 'y'>, to: Pick<PositionedNode | EmptyBranchMarker, 'x' | 'y'>) {
-  const startX = from.x + NODE_CARD_WIDTH
-  const startY = from.y + NODE_CENTER_Y
+function connectionPath(from: Pick<PositionedNode, 'x' | 'y'>, to: Pick<PositionedNode | EmptyBranchMarker, 'x' | 'y'>, metrics: GraphMetrics = DEFAULT_GRAPH_METRICS) {
+  const startX = from.x + metrics.nodeCardWidth
+  const startY = from.y + metrics.nodeCenterY
   const endX = to.x
-  const endY = to.y + NODE_CENTER_Y
+  const endY = to.y + metrics.nodeCenterY
   const curve = Math.max(52, Math.min(120, Math.abs(endX - startX) * 0.42))
   return `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`
 }
@@ -553,6 +659,54 @@ function isEmptyBranch(branch: BranchSummary, nodes: PlotNode[]) {
   return branch.id !== 'main' && branch.head === branch.from_event && !nodes.some((node) => node.branch_id === branch.id)
 }
 
+function buildGraphNodes(snapshot: Snapshot | null): PlotNode[] {
+  if (snapshot?.graph?.nodes?.length) return snapshot.graph.nodes
+  return (snapshot?.turns || []).map((turn, index, turns) => turnToPlotNode(turn, index, turns.length))
+}
+
+function buildGraphBranches(snapshot: Snapshot | null, branches: BranchSummary[], nodes: PlotNode[]): BranchSummary[] {
+  if (snapshot?.graph?.branches?.length) return snapshot.graph.branches
+  if (branches.length) return branches
+  if (!nodes.length) return []
+
+  const summaries = new Map<string, BranchSummary>()
+  for (const node of nodes) {
+    const current = node.branch_id === (snapshot?.branch_id || 'main')
+    const existing = summaries.get(node.branch_id)
+    summaries.set(node.branch_id, {
+      id: node.branch_id,
+      head: node.head || !existing ? node.id : existing.head,
+      title: node.branch_id === 'main' ? '主线' : node.branch_id,
+      created_at: node.ts,
+      current,
+    })
+  }
+  return Array.from(summaries.values())
+}
+
+function turnToPlotNode(turn: TurnEvent, index: number, total: number): PlotNode {
+  const title = firstLine(turn.user || turn.narrative) || `剧情节点 ${index + 1}`
+  return {
+    id: turn.id,
+    parent_id: turn.parent_id || undefined,
+    branch_id: turn.branch_id || 'main',
+    title: truncateText(title, 18),
+    summary: truncateText(firstLine(turn.narrative) || '剧情节点', 28),
+    ts: turn.ts,
+    current: index === total - 1,
+    head: index === total - 1,
+  }
+}
+
+function firstLine(value: string) {
+  return value.trim().split(/\r?\n/).find(Boolean) || ''
+}
+
+function truncateText(value: string, maxLength: number) {
+  const text = value.trim()
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}
+
 function formatBranchName(branch?: BranchSummary) {
   if (!branch) return '未知剧情线'
   if (branch.title?.trim()) return branch.title.trim()
@@ -569,7 +723,32 @@ function scrollElementTo(element: HTMLElement, left: number, top: number, behavi
   element.scrollTop = top
 }
 
-function useDragScroll(ref: RefObject<HTMLElement | null>) {
+function useElementSize(ref: RefObject<HTMLElement | null>, active: boolean) {
+  const [size, setSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    if (!active) return
+    const node = ref.current
+    if (!node) return
+
+    const updateSize = () => {
+      setSize((current) => {
+        const next = { width: node.clientWidth, height: node.clientHeight }
+        return current.width === next.width && current.height === next.height ? current : next
+      })
+    }
+
+    updateSize()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [active, ref])
+
+  return size
+}
+
+function useDragScroll(ref: RefObject<HTMLElement | null>, active: boolean) {
   const dragRef = useRef<{ x: number; y: number; left: number; top: number; active: boolean; moved: boolean; suppressClick: boolean }>({
     x: 0,
     y: 0,
@@ -581,11 +760,15 @@ function useDragScroll(ref: RefObject<HTMLElement | null>) {
   })
 
   useEffect(() => {
+    if (!active) return
     const node = ref.current
     if (!node) return
+    const previousTouchAction = node.style.touchAction
+    node.style.touchAction = 'none'
 
     const onPointerDown = (event: PointerEvent) => {
-      if ((event.target as HTMLElement).closest('input,textarea,select,[data-no-drag]')) return
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      if (shouldIgnoreDragStart(event.target)) return
       dragRef.current = { x: event.clientX, y: event.clientY, left: node.scrollLeft, top: node.scrollTop, active: true, moved: false, suppressClick: false }
       node.setPointerCapture(event.pointerId)
     }
@@ -628,6 +811,12 @@ function useDragScroll(ref: RefObject<HTMLElement | null>) {
       node.removeEventListener('pointerup', onPointerUp)
       node.removeEventListener('pointercancel', onPointerCancel)
       node.removeEventListener('click', onClickCapture, true)
+      node.style.touchAction = previousTouchAction
     }
-  }, [ref])
+  }, [active, ref])
+}
+
+function shouldIgnoreDragStart(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return true
+  return Boolean(target.closest('button,a,input,textarea,select,[role="button"],[data-no-drag]'))
 }

@@ -8,12 +8,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
 
 	"github.com/cloudwego/eino/schema"
 
+	"nova/internal/book"
 	"nova/internal/interactive"
 	"nova/internal/prompts"
 	"nova/internal/session"
@@ -45,23 +47,34 @@ func (c *interactiveConversation) PrepareMessages(originalMessage, agentMessage 
 	if err != nil {
 		return nil, err
 	}
-	tellerPrompt := c.tellerPrompt(storyCtx.Meta.StoryTellerID)
+	teller := c.teller(storyCtx.Meta.StoryTellerID)
+	tellerPrompt := teller.PromptForTargets("system", "context", "private_instruction")
+	tellerThinkingPrompt := teller.PromptForTargets("thinking")
+	tellerTurnPrompt := teller.PromptForTargets("turn")
 	stateJSON, err := json.MarshalIndent(storyCtx.Snapshot.State, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("序列化互动状态失败: %w", err)
 	}
-	characters := c.readSettingFile("characters.md")
-	worldBuilding := c.readSettingFile("world-building.md")
+	loreItems := c.loreContext()
+	characters := ""
+	worldBuilding := ""
+	if loreItems == "" {
+		characters = c.readSettingFile("characters.md")
+		worldBuilding = c.readSettingFile("world-building.md")
+	}
 	contextMessage := prompts.InteractiveStoryContext(prompts.InteractiveStoryPromptInput{
-		Title:             storyCtx.Meta.Title,
-		Origin:            storyCtx.Meta.Origin,
-		StoryTellerID:     storyCtx.Meta.StoryTellerID,
-		StoryTeller:       tellerPrompt,
-		BranchID:          storyCtx.Snapshot.BranchID,
-		ReplyTargetChars:  c.replyTargetChars,
-		Characters:        characters,
-		WorldBuilding:     worldBuilding,
-		SnapshotStateJSON: string(stateJSON),
+		Title:               storyCtx.Meta.Title,
+		Origin:              storyCtx.Meta.Origin,
+		StoryTellerID:       storyCtx.Meta.StoryTellerID,
+		StoryTeller:         tellerPrompt,
+		StoryTellerThinking: tellerThinkingPrompt,
+		StoryTellerTurn:     tellerTurnPrompt,
+		BranchID:            storyCtx.Snapshot.BranchID,
+		ReplyTargetChars:    c.replyTargetChars,
+		Characters:          characters,
+		WorldBuilding:       worldBuilding,
+		LoreItems:           loreItems,
+		SnapshotStateJSON:   string(stateJSON),
 	})
 	history := make([]*schema.Message, 0, len(storyCtx.Snapshot.Turns)*2+2)
 	history = append(history, schema.UserMessage(contextMessage))
@@ -69,21 +82,25 @@ func (c *interactiveConversation) PrepareMessages(originalMessage, agentMessage 
 		history = append(history, schema.UserMessage(turn.User))
 		history = append(history, schema.AssistantMessage(turn.Narrative, nil))
 	}
-	history = append(history, schema.UserMessage(prompts.InteractiveStoryTurnInstruction(agentMessage)))
+	history = append(history, schema.UserMessage(prompts.InteractiveStoryTurnInstruction(agentMessage, tellerThinkingPrompt)))
 	log.Printf(
-		"[interactive-agent] context composition story_id=%s branch_id=%s story_title=%s origin=%s teller_id=%s teller_prompt=%s characters=%s world_building=%s snapshot_state=%s turns=%d history=%s turn_instruction=%s",
+		"[interactive-agent] context composition story_id=%s branch_id=%s story_title=%s origin=%s teller_id=%s teller_slots=%s teller_prompt=%s teller_thinking=%s teller_turn=%s characters=%s world_building=%s snapshot_state=%s turns=%d history=%s turn_instruction=%s sources=%s",
 		c.storyID,
 		storyCtx.Snapshot.BranchID,
 		interactivePartSummary(storyCtx.Meta.Title),
 		interactivePartSummary(storyCtx.Meta.Origin),
 		storyCtx.Meta.StoryTellerID,
+		interactiveTellerSlotSummary(teller, "system", "context", "private_instruction", "thinking", "turn"),
 		interactivePartSummary(tellerPrompt),
-		interactivePartSummary(characters),
+		interactivePartSummary(tellerThinkingPrompt),
+		interactivePartSummary(tellerTurnPrompt),
+		interactivePartSummary(firstNonEmpty(loreItems, characters)),
 		interactivePartSummary(worldBuilding),
 		interactivePartSummary(string(stateJSON)),
 		len(storyCtx.Snapshot.Turns),
 		interactiveMessageListSummary(history),
 		interactivePartSummary(history[len(history)-1].Content),
+		interactiveStorySourceSummary(storyCtx.Meta.Title, storyCtx.Meta.Origin, teller, loreItems, characters, worldBuilding, string(stateJSON), storyCtx.Snapshot.Turns, agentMessage),
 	)
 	return history, nil
 }
@@ -143,35 +160,49 @@ func (c *interactiveConversation) BuildStateInstruction(turn interactive.TurnEve
 	if err != nil {
 		return "", fmt.Errorf("序列化互动状态失败: %w", err)
 	}
-	return prompts.InteractiveStateInstruction(prompts.InteractiveStatePromptInput{
+	teller := c.teller(storyCtx.Meta.StoryTellerID)
+	instruction := prompts.InteractiveStateInstruction(prompts.InteractiveStatePromptInput{
 		Title:             storyCtx.Meta.Title,
 		Origin:            storyCtx.Meta.Origin,
 		StoryTellerID:     storyCtx.Meta.StoryTellerID,
-		StoryTeller:       c.tellerPrompt(storyCtx.Meta.StoryTellerID),
+		StoryTeller:       teller.PromptForTargets("system", "context", "private_instruction"),
+		StoryTellerState:  teller.PromptForTargets("state_agent"),
 		BranchID:          storyCtx.Snapshot.BranchID,
 		Characters:        c.readSettingFile("characters.md"),
 		WorldBuilding:     c.readSettingFile("world-building.md"),
+		LoreItems:         c.loreContext(),
 		SnapshotStateJSON: string(stateJSON),
 		UserAction:        turn.User,
 		Narrative:         turn.Narrative,
-	}), nil
+	})
+	log.Printf(
+		"[interactive-state-agent] context composition story_id=%s branch_id=%s turn_id=%s teller_id=%s teller_slots=%s sources=%s instruction=%s",
+		c.storyID,
+		storyCtx.Snapshot.BranchID,
+		turn.ID,
+		storyCtx.Meta.StoryTellerID,
+		interactiveTellerSlotSummary(teller, "system", "context", "private_instruction", "state_agent"),
+		interactiveStateSourceSummary(storyCtx.Meta.Title, storyCtx.Meta.Origin, teller, c.loreContext(), c.readSettingFile("characters.md"), c.readSettingFile("world-building.md"), string(stateJSON), turn.User, turn.Narrative),
+		interactivePartSummary(instruction),
+	)
+	return instruction, nil
 }
 
-func (c *interactiveConversation) tellerPrompt(tellerID string) string {
+func (c *interactiveConversation) teller(tellerID string) interactive.Teller {
 	if c.novaDir == "" {
-		return ""
+		return interactive.Teller{}
 	}
 	teller, err := interactive.NewTellerLibrary(c.novaDir).Get(tellerID)
 	if err == nil {
-		return teller.Prompt
+		return teller
 	}
 	log.Printf("[interactive-agent] load teller failed id=%s err=%v", tellerID, err)
 	fallback, fallbackErr := interactive.NewTellerLibrary(c.novaDir).Get("classic")
 	if fallbackErr != nil {
 		log.Printf("[interactive-agent] load fallback teller failed err=%v", fallbackErr)
-		return ""
+		return interactive.Teller{}
 	}
-	return fallback.Prompt
+	return fallback
 }
 
 func (c *interactiveConversation) readSettingFile(name string) string {
@@ -183,6 +214,18 @@ func (c *interactiveConversation) readSettingFile(name string) string {
 		return ""
 	}
 	return string(data)
+}
+
+func (c *interactiveConversation) loreContext() string {
+	if c.workspace == "" {
+		return ""
+	}
+	context, err := book.NewLoreStore(c.workspace).ContextMarkdown()
+	if err != nil {
+		log.Printf("[interactive-agent] load lore context failed workspace=%s err=%v", c.workspace, err)
+		return ""
+	}
+	return context
 }
 
 func (c *interactiveConversation) MarkInterrupted(userMessage, assistantContent, reason string) error {
@@ -206,32 +249,140 @@ func interactiveStateOpsLogJSON(ops []interactive.StateOp) string {
 	return string(data)
 }
 
+type interactiveContextSource struct {
+	Source  string
+	Title   string
+	Content string
+	Note    string
+}
+
+func interactiveStorySourceSummary(title, origin string, teller interactive.Teller, loreItems, characters, worldBuilding, snapshotState string, turns []interactive.TurnEvent, userAction string) string {
+	parts := []interactiveContextSource{
+		{Source: "互动故事", Title: "故事标题", Content: title},
+		{Source: "互动故事", Title: "开端", Content: origin},
+	}
+	parts = append(parts, interactiveTellerSlotSources(teller, "system", "context", "private_instruction", "thinking", "turn")...)
+	if strings.TrimSpace(loreItems) != "" {
+		parts = append(parts, interactiveContextSource{Source: "资料库", Title: ".nova/lore/items.json", Content: loreItems})
+	} else {
+		parts = append(parts,
+			interactiveContextSource{Source: "设定文件", Title: "setting/characters.md", Content: characters, Note: "资料库为空时回退注入"},
+			interactiveContextSource{Source: "设定文件", Title: "setting/world-building.md", Content: worldBuilding, Note: "资料库为空时回退注入"},
+		)
+	}
+	parts = append(parts, interactiveContextSource{Source: "互动状态", Title: "当前快照 JSON", Content: snapshotState})
+	for i, turn := range turns {
+		parts = append(parts,
+			interactiveContextSource{Source: "历史回合", Title: fmt.Sprintf("第 %d 回合用户行动", i+1), Content: turn.User},
+			interactiveContextSource{Source: "历史回合", Title: fmt.Sprintf("第 %d 回合剧情", i+1), Content: turn.Narrative},
+		)
+	}
+	parts = append(parts, interactiveContextSource{Source: "本轮行动", Title: "当前用户行动", Content: userAction})
+	return interactiveContextSourceListSummary(parts)
+}
+
+func interactiveStateSourceSummary(title, origin string, teller interactive.Teller, loreItems, characters, worldBuilding, snapshotState, userAction, narrative string) string {
+	parts := []interactiveContextSource{
+		{Source: "互动故事", Title: "故事标题", Content: title},
+		{Source: "互动故事", Title: "开端", Content: origin},
+	}
+	parts = append(parts, interactiveTellerSlotSources(teller, "system", "context", "private_instruction", "state_agent")...)
+	if strings.TrimSpace(loreItems) != "" {
+		parts = append(parts, interactiveContextSource{Source: "资料库", Title: ".nova/lore/items.json", Content: loreItems})
+	} else {
+		parts = append(parts,
+			interactiveContextSource{Source: "设定文件", Title: "setting/characters.md", Content: characters, Note: "资料库为空时回退注入"},
+			interactiveContextSource{Source: "设定文件", Title: "setting/world-building.md", Content: worldBuilding, Note: "资料库为空时回退注入"},
+		)
+	}
+	parts = append(parts,
+		interactiveContextSource{Source: "互动状态", Title: "当前快照 JSON", Content: snapshotState},
+		interactiveContextSource{Source: "本轮行动", Title: "用户行动", Content: userAction},
+		interactiveContextSource{Source: "本轮剧情", Title: "Agent 正文", Content: narrative},
+	)
+	return interactiveContextSourceListSummary(parts)
+}
+
+func interactiveTellerSlotSources(teller interactive.Teller, targets ...string) []interactiveContextSource {
+	allowed := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		allowed[target] = true
+	}
+	parts := []interactiveContextSource{}
+	for _, slot := range teller.Slots {
+		if !slot.Enabled || !allowed[slot.Target] || strings.TrimSpace(slot.Content) == "" {
+			continue
+		}
+		parts = append(parts, interactiveContextSource{
+			Source:  "讲述者注入规则",
+			Title:   fmt.Sprintf("%s（%s）", slot.Name, slot.Target),
+			Content: slot.Content,
+			Note:    "teller=" + teller.ID,
+		})
+	}
+	return parts
+}
+
+func interactiveTellerSlotSummary(teller interactive.Teller, targets ...string) string {
+	sources := interactiveTellerSlotSources(teller, targets...)
+	if len(sources) == 0 {
+		return "count=0"
+	}
+	names := make([]string, 0, len(sources))
+	for _, source := range sources {
+		names = append(names, source.Title)
+	}
+	return fmt.Sprintf("count=%d names=%q", len(names), names)
+}
+
+func interactiveContextSourceListSummary(parts []interactiveContextSource) string {
+	if len(parts) == 0 {
+		return "count=0"
+	}
+	items := make([]string, 0, len(parts))
+	for i, part := range parts {
+		content := strings.TrimSpace(part.Content)
+		if content == "" {
+			continue
+		}
+		fields := []string{
+			fmt.Sprintf("%d:source=%q", i, part.Source),
+			fmt.Sprintf("title=%q", part.Title),
+			fmt.Sprintf("bytes=%d", len(content)),
+			fmt.Sprintf("chars=%d", utf8.RuneCountInString(content)),
+			"preview=" + strconv.Quote(interactiveSafePreview(content, 100)),
+		}
+		if part.Note != "" {
+			fields = append(fields, "note="+strconv.Quote(part.Note))
+		}
+		items = append(items, strings.Join(fields, ","))
+	}
+	return fmt.Sprintf("count=%d parts=[%s]", len(items), strings.Join(items, "; "))
+}
+
 func interactiveMessageListSummary(messages []*schema.Message) string {
 	if len(messages) == 0 {
 		return "count=0"
 	}
-	parts := make([]string, 0, interactiveMinInt(len(messages), 8)+1)
-	if len(messages) <= 8 {
-		for i, msg := range messages {
-			parts = append(parts, interactiveMessageSummary(i, msg))
-		}
-	} else {
-		for i := 0; i < 4; i++ {
-			parts = append(parts, interactiveMessageSummary(i, messages[i]))
-		}
-		parts = append(parts, fmt.Sprintf("... omitted=%d ...", len(messages)-8))
-		for i := len(messages) - 4; i < len(messages); i++ {
-			parts = append(parts, interactiveMessageSummary(i, messages[i]))
-		}
+	parts := make([]string, 0, len(messages))
+	for i, msg := range messages {
+		parts = append(parts, interactiveMessageSummary(i, len(messages), msg))
 	}
 	return fmt.Sprintf("count=%d parts=[%s]", len(messages), strings.Join(parts, "; "))
 }
 
-func interactiveMessageSummary(index int, msg *schema.Message) string {
+func interactiveMessageSummary(index, total int, msg *schema.Message) string {
 	if msg == nil {
 		return fmt.Sprintf("%d:<nil>", index)
 	}
-	return fmt.Sprintf("%d:%s(%s)", index, msg.Role, interactivePartSummary(msg.Content))
+	source := "互动上下文"
+	if index > 0 && index < total-1 {
+		source = "历史回合"
+	}
+	if index == total-1 {
+		source = "本轮行动指令"
+	}
+	return fmt.Sprintf("%d:source=%s role=%s(%s)", index, source, msg.Role, interactivePartSummary(msg.Content))
 }
 
 func interactivePartSummary(s string) string {
@@ -242,7 +393,20 @@ func interactivePartSummary(s string) string {
 		"chars=" + fmt.Sprint(utf8.RuneCountInString(s)),
 		"lines=" + fmt.Sprint(interactiveLineCount(s)),
 		"sha=" + interactiveShortSHA256(s),
+		"preview=" + strconv.Quote(interactiveSafePreview(s, 80)),
 	}, ",")
+}
+
+func interactiveSafePreview(content string, limit int) string {
+	content = strings.ReplaceAll(content, "\n", "\\n")
+	content = strings.ReplaceAll(content, "\r", "\\r")
+	if len(content) <= limit {
+		return content
+	}
+	for limit > 0 && !utf8.RuneStart(content[limit]) {
+		limit--
+	}
+	return content[:limit] + "..."
 }
 
 func interactiveBoolString(v bool) string {
@@ -272,4 +436,13 @@ func interactiveMinInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

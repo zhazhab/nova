@@ -1,4 +1,5 @@
-import { Activity, Compass, Flag, MapPin, Package, Sparkles, UserRoundCheck } from 'lucide-react'
+import { Activity, Compass, Copy, Flag, MapPin, Package, Plus, Sparkles, Tag, UserRoundCheck } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -30,7 +31,7 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
   const stateStatus = snapshot?.current_turn?.state_status
 
   return (
-    <aside className="flex h-full min-w-0 flex-col border-l border-[#2f3540] bg-[#1b1e24] p-4">
+    <aside className="flex h-full min-w-0 flex-col border-l border-[#303238] bg-[#202124] p-4">
       <div className="mb-3 flex h-8 items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-[#e0e4ec]">场景记忆</h2>
@@ -39,7 +40,7 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
         <div className="flex items-center gap-1.5">
           {stateStatus === 'pending' ? <Badge variant="outline" className="border-[#6b5b2f] bg-[#2c2618] text-[#d9bb69]">同步中</Badge> : null}
           {stateStatus === 'failed' ? <Badge variant="outline" className="border-[#6a3535] bg-[#2c1b1b] text-[#df8d8d]">同步失败</Badge> : null}
-          <Badge variant="outline" className="border-[#3a414d] bg-[#252a33] text-[#8d96a7]">{formatBranchName(snapshot?.branch_id)}</Badge>
+          <Badge variant="outline" className="border-[#303238] bg-[#25262a] text-[#8d96a7]">{formatBranchName(snapshot?.branch_id)}</Badge>
         </div>
       </div>
       {stateStatus === 'failed' && snapshot?.current_turn?.state_error ? (
@@ -48,8 +49,8 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
         </div>
       ) : null}
       <ScrollArea className="min-h-0 flex-1 pr-1">
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <MapPin className="h-3.5 w-3.5" />
             当前场景
           </div>
@@ -59,38 +60,45 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
             <SnapshotMetric label="视角" value={pov || '未记录'} />
           </div>
           {sceneEntries.length ? (
-            <div className="mt-3 border-t border-[#29313c] pt-3">
+            <div className="mt-3 border-t border-[#303238] pt-3">
               <StateValue value={Object.fromEntries(sceneEntries)} />
             </div>
           ) : null}
         </section>
 
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-2 text-xs font-semibold text-[#d6dbe5]">场景笔记</div>
+          <div className="rounded-md border border-[#303238] bg-[#202124] px-3 py-2 text-xs leading-5 text-[#7f8898]">
+            记录场景的设计意图或待完成事项...
+          </div>
+        </section>
+
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <UserRoundCheck className="h-3.5 w-3.5" />
             在场角色
           </div>
           <div className="flex flex-wrap gap-1.5 text-sm text-[#a8adb7]">
-            {onStage.length ? onStage.map((name) => <Badge key={String(name)} className="bg-[#263646] text-[#d6e9ff]" variant="secondary">{String(name)}</Badge>) : '暂无在场角色'}
+            {onStage.length ? onStage.map((name) => <Badge key={String(name)} className="border border-[#3a3d44] bg-[#25262a] text-[#d7dbe2]" variant="secondary">{String(name)}</Badge>) : '暂无在场角色'}
           </div>
         </section>
 
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <Compass className="h-3.5 w-3.5" />
             可行动空间
           </div>
           <CompactList items={actionSpace} empty="暂无可行动入口" />
         </section>
 
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <Activity className="h-3.5 w-3.5" />
             角色状态
           </div>
           <div className="space-y-2 text-xs text-[#a8adb7]">
             {characters.length ? characters.map(([name, state]) => (
-              <div key={name} className="rounded-md border border-[#303743] bg-[#191d24] p-2">
+              <div key={name} className="rounded-md border border-[#303238] bg-[#202124] p-2">
                 <div className="mb-1 font-medium text-[#d6dbe5]">{name}</div>
                 <StateValue value={state} />
               </div>
@@ -98,20 +106,20 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
           </div>
         </section>
 
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <Package className="h-3.5 w-3.5" />
             物品与资源
           </div>
           <div className="space-y-2 text-xs text-[#a8adb7]">
             {inventory ? (
-              <div className="rounded-md border border-[#303743] bg-[#191d24] p-2">
+              <div className="rounded-md border border-[#303238] bg-[#202124] p-2">
                 <div className="mb-1 font-medium text-[#d6dbe5]">物品</div>
                 <StateValue value={inventory} />
               </div>
             ) : null}
             {resources ? (
-              <div className="rounded-md border border-[#303743] bg-[#191d24] p-2">
+              <div className="rounded-md border border-[#303238] bg-[#202124] p-2">
                 <div className="mb-1 font-medium text-[#d6dbe5]">资源</div>
                 <StateValue value={resources} />
               </div>
@@ -120,8 +128,8 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
           </div>
         </section>
 
-        <section className="mb-3 rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <Flag className="h-3.5 w-3.5" />
             规则与暗线
           </div>
@@ -131,8 +139,8 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
           </div>
         </section>
 
-        <section className="rounded-lg border border-[#343b47] bg-[#111318] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#7fb7e8]">
+        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
             <Sparkles className="h-3.5 w-3.5" />
             关键事件
           </div>
@@ -142,14 +150,33 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
             )) : '暂无关键事件'}
           </div>
         </section>
+
+        <section className="rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
+          <div className="mb-3 text-xs font-semibold text-[#d6dbe5]">快捷操作</div>
+          <div className="grid grid-cols-2 gap-2">
+            <InspectorAction icon={Plus} label="新建场景" />
+            <InspectorAction icon={Copy} label="复制链接" />
+            <InspectorAction icon={Compass} label="添加分支" />
+            <InspectorAction icon={Tag} label="设置标签" />
+          </div>
+        </section>
       </ScrollArea>
     </aside>
   )
 }
 
+function InspectorAction({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <button type="button" className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#303238] bg-[#25262a] text-xs text-[#aeb6c4] hover:border-[#4a4d54] hover:bg-[#303238] hover:text-[#e1e8f3]">
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}</span>
+    </button>
+  )
+}
+
 function SnapshotMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-[#303743] bg-[#191d24] px-2 py-2">
+    <div className="min-w-0 rounded-md border border-[#303238] bg-[#202124] px-2 py-2">
       <div className="text-[10px] text-[#747f91]">{label}</div>
       <div className="truncate text-xs font-medium text-[#c8d0dd]" title={value}>{value}</div>
     </div>
@@ -185,7 +212,7 @@ function StateValue({ value }: { value: unknown }) {
 function EventItem({ event, index }: { event: unknown; index: number }) {
   if (!isPlainObject(event)) {
     return (
-      <div className="rounded-md border border-[#303743] bg-[#191d24] p-2 text-[#aeb6c4]">
+      <div className="rounded-md border border-[#303238] bg-[#202124] p-2 text-[#aeb6c4]">
         {formatScalar(event)}
       </div>
     )
@@ -196,11 +223,11 @@ function EventItem({ event, index }: { event: unknown; index: number }) {
   const detailEntries = Object.entries(event).filter(([key]) => !EVENT_PRIMARY_KEYS.has(key))
 
   return (
-    <article className="rounded-md border border-[#303743] bg-[#191d24] p-2">
+    <article className="rounded-md border border-[#303238] bg-[#202124] p-2">
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0 font-medium text-[#d6dbe5]">{title}</div>
         {typeof event.type === 'string' && event.type.trim() ? (
-          <Badge variant="outline" className="h-5 shrink-0 border-[#3a414d] bg-[#222936] px-1.5 text-[10px] text-[#93a4bb]">
+          <Badge variant="outline" className="h-5 shrink-0 border-[#303238] bg-[#25262a] px-1.5 text-[10px] text-[#93a4bb]">
             {event.type.trim()}
           </Badge>
         ) : null}
@@ -225,7 +252,7 @@ function CompactList({ items, empty }: { items: unknown[]; empty: string }) {
   return (
     <div className="space-y-1.5 text-xs text-[#a8adb7]">
       {items.map((item, index) => (
-        <div key={index} className="rounded-md border border-[#303743] bg-[#191d24] px-2 py-1.5">
+        <div key={index} className="rounded-md border border-[#303238] bg-[#202124] px-2 py-1.5">
           {renderReadableValue(item)}
         </div>
       ))}
@@ -249,7 +276,7 @@ function renderReadableValue(value: unknown): ReactNode {
       return (
         <div className="flex flex-wrap gap-1">
           {value.map((item, index) => (
-            <Badge key={index} variant="secondary" className="bg-[#243040] text-[#c8d6e8]">
+            <Badge key={index} variant="secondary" className="border border-[#3a3d44] bg-[#25262a] text-[#d7dbe2]">
               {formatScalar(item)}
             </Badge>
           ))}
@@ -259,7 +286,7 @@ function renderReadableValue(value: unknown): ReactNode {
     return (
       <div className="space-y-1">
         {value.map((item, index) => (
-          <div key={index} className="rounded border border-[#2b323d] bg-[#151920] px-2 py-1">
+          <div key={index} className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1">
             {renderReadableValue(item)}
           </div>
         ))}

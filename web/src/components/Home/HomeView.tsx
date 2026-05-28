@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, Plus, Pencil, Trash2, Check, X, FolderOpen } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,6 @@ import {
   createBook,
   getBookInfo,
   removeBook,
-  selectDirectory,
   switchWorkspace,
   updateBookInfo,
   type BookMeta,
@@ -19,6 +18,8 @@ import {
 interface HomeViewProps {
   /** 当前工作区路径，用于高亮当前书籍并作为父目录推断默认值 */
   workspace: string
+  /** 用户 Nova 数据目录，新建书籍默认创建在该目录下 */
+  novaDir: string
   /** 最近书籍列表 */
   books: BookRecord[]
   /** 切换到指定 workspace 后由父组件刷新业务状态 */
@@ -45,17 +46,13 @@ function relativeTime(isoStr: string): string {
   return `${months}月前`
 }
 
-const inputCls = 'w-full rounded border border-[#3a3d44] bg-[#25262a] px-2 py-1 text-xs text-[#d7dbe2] outline-none focus:border-[#2f7dd3]'
+const inputCls = 'w-full rounded border border-[#3a3d44] bg-[#25262a] px-2 py-1 text-xs text-[#d7dbe2] outline-none focus:border-[#4a4d54]'
 
 /** 书籍管理视图：集中展示、创建、打开和编辑最近书籍。 */
-export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }: HomeViewProps) {
-  /** 当前 workspace 的父目录，作为新建书籍的默认存放路径 */
-  const parentDir = workspace ? workspace.replace(/\/[^/]*\/?$/, '') || '/' : '/'
-
+export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, onClose }: HomeViewProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
   const [createAuthor, setCreateAuthor] = useState('')
-  const [createPath, setCreatePath] = useState('')
   const [createDesc, setCreateDesc] = useState('')
   const [createError, setCreateError] = useState('')
   const [creating, setCreating] = useState(false)
@@ -67,15 +64,11 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
   const [editLoading, setEditLoading] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
 
-  const [opening, setOpening] = useState(false)
-  const [openError, setOpenError] = useState('')
-
-  /** 打开新建书籍表单，自动以当前父目录作为初始路径 */
+  /** 打开新建书籍表单，新书统一创建在用户 Nova 数据目录下 */
   const openCreateForm = () => {
     setShowCreateForm(true)
     setCreateTitle('')
     setCreateAuthor('')
-    setCreatePath(parentDir)
     setCreateDesc('')
     setCreateError('')
   }
@@ -83,12 +76,11 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
   /** 提交新建书籍 */
   const handleCreate = async () => {
     if (!createTitle.trim()) { setCreateError('书名不能为空'); return }
-    if (!createPath.trim()) { setCreateError('存放路径不能为空'); return }
+    if (!novaDir.trim()) { setCreateError('Nova 数据目录未就绪，请稍后重试'); return }
     setCreating(true)
     setCreateError('')
     try {
       const data = await createBook(
-        createPath.trim(),
         createTitle.trim(),
         createAuthor.trim() || undefined,
         createDesc.trim() || undefined,
@@ -110,22 +102,6 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
       onSwitch(data.workspace || path)
     } catch (e) {
       console.error('切换 workspace 失败', e)
-    }
-  }
-
-  /** 打开自定义路径 */
-  const handleOpenPath = async () => {
-    setOpening(true)
-    setOpenError('')
-    try {
-      const selected = await selectDirectory()
-      if (selected.cancelled || !selected.path) return
-      const data = await switchWorkspace(selected.path)
-      onSwitch(data.workspace || selected.path)
-    } catch (e: unknown) {
-      setOpenError(e instanceof Error ? e.message : '打开失败')
-    } finally {
-      setOpening(false)
     }
   }
 
@@ -176,7 +152,7 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
   return (
     <div className="flex h-full min-w-0 flex-col bg-[#1b1c1f] text-[#d7dbe2]">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[#303238] bg-[#202124] px-4 text-xs">
-        <BookOpen className="h-3.5 w-3.5 text-[#7aa2f7]" />
+        <BookOpen className="h-3.5 w-3.5 text-[#a8adb7]" />
         <span className="font-medium text-[#d7dbe2]">书籍管理</span>
         {onClose && (
           <button
@@ -235,13 +211,9 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
                   placeholder="作者（选填）"
                   className={inputCls}
                 />
-                <Input
-                  type="text"
-                  value={createPath}
-                  onChange={(e) => setCreatePath(e.target.value)}
-                  placeholder="存放路径（必填）"
-                  className={inputCls}
-                />
+                <div className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1.5 text-xs text-[#8f98a8]">
+                  新书将创建在：<span className="text-[#c5c9d1]">{novaDir || 'Nova 数据目录加载中...'}</span>
+                </div>
                 <Textarea
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
@@ -252,7 +224,7 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
                 {createError && <div className="text-xs text-red-400">{createError}</div>}
                 <div className="flex items-center justify-end gap-2">
                   <Button type="button" size="xs" variant="ghost" className="text-[#858b96] hover:bg-[#303238]" onClick={() => setShowCreateForm(false)}>取消</Button>
-                  <Button type="button" size="xs" className="bg-[#2f7dd3] text-white hover:bg-[#3b8eea]" disabled={creating} onClick={handleCreate}>
+                  <Button type="button" size="xs" className="bg-[#4a4d54] text-white hover:bg-[#5a5d64]" disabled={creating || !novaDir.trim()} onClick={handleCreate}>
                     {creating ? '创建中...' : '创建'}
                   </Button>
                 </div>
@@ -306,7 +278,7 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
                               </TooltipIconButton>
                               <TooltipIconButton
                                 label="保存"
-                                className="text-[#2f7dd3] hover:bg-[#2f7dd3]/15"
+                                className="text-[#4a4d54] hover:bg-[#4a4d54]/15"
                                 disabled={editSaving}
                                 onClick={handleSaveEdit}
                               >
@@ -322,12 +294,12 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
                   return (
                     <div
                       key={book.path}
-                      className={`group relative flex items-start gap-2 rounded px-3 py-2 text-xs hover:bg-[#2f7dd3]/15 ${
-                        isCurrent ? 'text-[#d7e8ff]' : 'text-[#c5c9d1]'
+                      className={`group relative flex items-start gap-2 rounded px-3 py-2 text-xs hover:bg-[#4a4d54]/15 ${
+                        isCurrent ? 'text-[#f0f2f5]' : 'text-[#c5c9d1]'
                       }`}
                     >
                       {isCurrent && (
-                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[#2f7dd3]" />
+                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[#4a4d54]" />
                       )}
                       <button
                         type="button"
@@ -338,14 +310,14 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[#858b96]">
                           {book.author && <span>{book.author}</span>}
                           {book.last_opened_at && <span>{relativeTime(book.last_opened_at)}</span>}
-                          {isCurrent && <span className="rounded bg-[#2f7dd3]/20 px-1 text-[#8bb8f0]">当前</span>}
+                          {isCurrent && <span className="rounded bg-[#4a4d54]/20 px-1 text-[#c5c9d1]">当前</span>}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-[#5a5f6b]">{book.path}</div>
                       </button>
                       <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
                         <TooltipIconButton
                           label="编辑信息"
-                          className="text-[#858b96] opacity-0 hover:bg-[#2f7dd3]/15 hover:text-[#8bb8f0] group-hover:opacity-100"
+                          className="text-[#858b96] opacity-0 hover:bg-[#4a4d54]/15 hover:text-[#c5c9d1] group-hover:opacity-100"
                           onClick={() => startEdit(book)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -365,27 +337,6 @@ export function HomeView({ workspace, books, onSwitch, onBooksChange, onClose }:
             )}
           </section>
 
-          {/* 打开任意目录 */}
-          <section className="rounded border border-[#303238] bg-[#202124] p-4">
-            <div className="mb-3 flex items-center gap-2 text-xs font-medium text-[#c5c9d1]">
-              <FolderOpen className="h-3.5 w-3.5 text-[#858b96]" />
-              打开其他目录
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded border border-[#303238] bg-[#1b1c1f] px-3 py-2">
-              <div className="min-w-0 text-xs text-[#8f98a8]">从系统文件夹选择器中选择已有书籍工作区。</div>
-              <Button
-                type="button"
-                size="xs"
-                className="shrink-0 gap-1.5 bg-[#2f7dd3] text-white hover:bg-[#3b8eea]"
-                disabled={opening}
-                onClick={handleOpenPath}
-              >
-                <FolderOpen className="h-3.5 w-3.5" />
-                {opening ? '选择中...' : '选择文件夹'}
-              </Button>
-            </div>
-            {openError && <div className="mt-2 text-xs text-red-400">{openError}</div>}
-          </section>
         </div>
       </ScrollArea>
     </div>

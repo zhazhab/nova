@@ -1,6 +1,6 @@
 import type { SSEEvent } from '@/lib/api'
 
-export type InteractiveSubmode = 'story' | 'setting'
+export type InteractiveSubmode = 'story' | 'lore' | 'creator' | 'teller'
 
 export interface StorySummary {
   id: string
@@ -19,15 +19,34 @@ export interface StoryIndex {
 }
 
 export interface Teller {
+  version: number
   id: string
   name: string
   description: string
   random_event_rate: number
   tags: string[]
-  prompt?: string
+  context_policy: TellerContextPolicy
+  slots: TellerPromptSlot[]
   custom: boolean
   invalid?: boolean
   error?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface TellerContextPolicy {
+  creator: string
+  lore: string
+  runtime_state: string
+  recent_turns: number
+}
+
+export interface TellerPromptSlot {
+  id: string
+  name: string
+  target: 'system' | 'context' | 'thinking' | 'private_instruction' | 'turn' | 'state_agent' | 'editor_agent'
+  enabled: boolean
+  content: string
 }
 
 export interface TurnEvent {

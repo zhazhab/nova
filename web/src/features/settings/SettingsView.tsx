@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import type { LayeredSettings, Settings, SettingsLayer, StyleRule } from './types'
 import { fetchSettings, updateUserSettings, updateWorkspaceSettings } from './api'
+import { FONT_OPTIONS, fontLabelFor } from './font-options'
 import { getStyles } from '@/lib/api'
 
 type SettingsScope = 'ide' | 'interactive'
@@ -81,7 +82,7 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
               type="button"
               onClick={() => setActiveScope(scope)}
               className={`rounded px-2 py-0.5 ${
-                activeScope === scope ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'
+                activeScope === scope ? 'bg-[#4a4d54] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'
               }`}
             >
               {scope === 'ide' ? 'IDE 模式' : '互动模式'}
@@ -95,7 +96,7 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
               type="button"
               onClick={() => setActiveLayer(l)}
               className={`rounded px-2 py-0.5 ${
-                activeLayer === l ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'
+                activeLayer === l ? 'bg-[#4a4d54] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'
               }`}
             >
               {l === 'user' ? '用户配置' : '当前工作区'}
@@ -106,7 +107,7 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
           type="button"
           onClick={onSave}
           disabled={saving}
-          className="ml-auto rounded bg-[#0e639c] px-3 py-0.5 text-white disabled:opacity-50"
+          className="ml-auto rounded bg-[#4a4d54] px-3 py-0.5 text-white disabled:opacity-50"
         >
           {saving ? '保存中…' : '保存'}
         </button>
@@ -141,6 +142,15 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
           <ReadOnly label="Nova 数据目录" value={layered?.paths?.nova_dir} />
           <ReadOnly label="用户配置文件" value={layered?.paths?.user_config} />
           <ReadOnly label="工作区配置文件" value={layered?.paths?.workspace_config} />
+        </Section>
+
+        <Section title="公共配置 · 外观">
+          <FontSelect label="界面字体" value={draft.ui_font_family}
+                      effective={effective.ui_font_family}
+                      onChange={(v) => setField('ui_font_family', v)} />
+          <FontSelect label="阅读字体" value={draft.reading_font_family}
+                      effective={effective.reading_font_family}
+                      onChange={(v) => setField('reading_font_family', v)} />
         </Section>
 
         <Section title="公共配置 · Agent">
@@ -193,9 +203,25 @@ export function SettingsView({ onClose }: { onClose?: () => void }) {
                 <Num label="最大输出 Token" value={draft.interactive_max_tokens ?? null}
                      placeholder="不填则不限制，优先避免截断"
                      onChange={(v) => setField('interactive_max_tokens', v)} />
+                <Num label="故事舞台字号 (px)" value={draft.interactive_stage_font_size ?? null}
+                     placeholder={placeholderFor('interactive_stage_font_size')}
+                     onChange={(v) => setField('interactive_stage_font_size', v)} />
+                <Num label="故事舞台行间距" value={draft.interactive_stage_line_height ?? null}
+                     placeholder={placeholderFor('interactive_stage_line_height')}
+                     step={0.05}
+                     onChange={(v) => setField('interactive_stage_line_height', v)} />
               </>
             ) : (
-              <ReadOnly label="单轮目标字数" value={`当前工作区配置，生效值：${effective.interactive_reply_target_chars ?? 1200} 个中文字`} />
+              <>
+                <ReadOnly label="单轮目标字数" value={`当前工作区配置，生效值：${effective.interactive_reply_target_chars ?? 1200} 个中文字`} />
+                <Num label="故事舞台字号 (px)" value={draft.interactive_stage_font_size ?? null}
+                     placeholder={placeholderFor('interactive_stage_font_size')}
+                     onChange={(v) => setField('interactive_stage_font_size', v)} />
+                <Num label="故事舞台行间距" value={draft.interactive_stage_line_height ?? null}
+                     placeholder={placeholderFor('interactive_stage_line_height')}
+                     step={0.05}
+                     onChange={(v) => setField('interactive_stage_line_height', v)} />
+              </>
             )}
           </Section>
         )}
@@ -243,8 +269,9 @@ function Text({ label, value, placeholder, type = 'text', disabled, onChange }: 
   )
 }
 
-function Num({ label, value, placeholder, onChange }: {
+function Num({ label, value, placeholder, step = 1, onChange }: {
   label: string; value: number | null; placeholder?: string
+  step?: number
   onChange: (v: number | null) => void
 }) {
   return (
@@ -252,6 +279,7 @@ function Num({ label, value, placeholder, onChange }: {
       <span className="w-44 shrink-0 text-[#9aa0aa]">{label}</span>
       <input
         type="number"
+        step={step}
         value={value ?? ''}
         placeholder={placeholder}
         onChange={(e) => {
@@ -283,6 +311,29 @@ function BoolTri({ label, value, effective, onChange }: {
         <option value="">继承（{eff}）</option>
         <option value="true">开启</option>
         <option value="false">关闭</option>
+      </select>
+    </label>
+  )
+}
+
+function FontSelect({ label, value, effective, onChange }: {
+  label: string
+  value?: string
+  effective?: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label className="flex items-center gap-3">
+      <span className="w-44 shrink-0 text-[#9aa0aa]">{label}</span>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-[#d7dbe2]"
+      >
+        <option value="">继承（{fontLabelFor(effective)}）</option>
+        {FONT_OPTIONS.map((font) => (
+          <option key={font.value} value={font.value}>{font.label}</option>
+        ))}
       </select>
     </label>
   )

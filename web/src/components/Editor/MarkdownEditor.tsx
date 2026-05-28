@@ -396,7 +396,7 @@ export function MarkdownEditor({ fileName, content, onSave, onQuoteSelection, sa
       {/* 编辑器工具栏 */}
       <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-[#2f3136] bg-[#1f2023] px-4">
         <div className="flex min-w-0 items-center gap-3 text-xs text-[#b7bbc3]">
-          <BookOpen className="h-4 w-4 shrink-0 text-[#7aa2f7]" />
+          <BookOpen className="h-4 w-4 shrink-0 text-[#a8adb7]" />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-[#d7dbe2]">
               {chapterSummary?.display_title || fileName}
@@ -547,7 +547,7 @@ function EditorSettingsPanel({
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-medium text-[#d7dbe2]">
-          <Palette className="h-3.5 w-3.5 text-[#7aa2f7]" />
+          <Palette className="h-3.5 w-3.5 text-[#a8adb7]" />
           编辑器设置
         </div>
         <button type="button" className="text-xs text-[#858b96] hover:text-[#d7dbe2]" onClick={onClose}>
@@ -805,7 +805,7 @@ function SelectionToolbar({ editor, onQuote }: { editor: Editor; onQuote: () => 
     >
       <button
         type="button"
-        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[#c5c9d1] hover:bg-[#2f7dd3]/30 hover:text-white"
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-[#c5c9d1] hover:bg-[#4a4d54]/30 hover:text-white"
         onClick={onQuote}
         title="引用到 AI (⌘⇧L)"
       >

@@ -14,7 +14,11 @@ interface PropagatingKeyboardShortcutEvent extends KeyboardShortcutEvent {
 /** 判断快捷键事件是否来自用户正在编辑文本的区域。 */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
-  if (target.isContentEditable || target.contentEditable === 'true') return true
+  let node: HTMLElement | null = target
+  while (node) {
+    if (node.isContentEditable || node.contentEditable === 'true') return true
+    node = node.parentElement
+  }
   if (EDITABLE_FORM_TAGS.has(target.tagName)) return true
   return Boolean(target.closest('[contenteditable="true"]'))
 }

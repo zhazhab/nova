@@ -111,11 +111,15 @@ func TestInteractiveStoriesAndTellersAPI(t *testing.T) {
 		t.Fatalf("get teller status = %d body=%s", classicResp.Code, classicResp.Body.String())
 	}
 	var classic struct {
-		ID     string `json:"id"`
-		Prompt string `json:"prompt"`
+		ID    string `json:"id"`
+		Slots []struct {
+			ID      string `json:"id"`
+			Target  string `json:"target"`
+			Content string `json:"content"`
+		} `json:"slots"`
 	}
 	decodeResponse(t, classicResp.Body.Bytes(), &classic)
-	if classic.ID != "classic" || classic.Prompt == "" {
+	if classic.ID != "classic" || len(classic.Slots) == 0 || classic.Slots[0].Content == "" {
 		t.Fatalf("classic teller mismatch: %#v", classic)
 	}
 }

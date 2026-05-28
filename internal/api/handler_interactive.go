@@ -169,3 +169,39 @@ func (s *Server) handleInteractiveTeller(ctx context.Context, c *app.RequestCont
 	}
 	writeJSON(c, consts.StatusOK, teller)
 }
+
+func (s *Server) handleInteractiveTellerCreate(ctx context.Context, c *app.RequestContext) {
+	var body interactive.Teller
+	if err := c.BindJSON(&body); err != nil {
+		writeError(c, consts.StatusBadRequest, "请求参数无效: "+err.Error())
+		return
+	}
+	teller, err := s.app.CreateInteractiveTeller(body)
+	if err != nil {
+		writeError(c, consts.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(c, consts.StatusOK, teller)
+}
+
+func (s *Server) handleInteractiveTellerUpdate(ctx context.Context, c *app.RequestContext) {
+	var body interactive.Teller
+	if err := c.BindJSON(&body); err != nil {
+		writeError(c, consts.StatusBadRequest, "请求参数无效: "+err.Error())
+		return
+	}
+	teller, err := s.app.UpdateInteractiveTeller(c.Param("id"), body)
+	if err != nil {
+		writeError(c, consts.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(c, consts.StatusOK, teller)
+}
+
+func (s *Server) handleInteractiveTellerDelete(ctx context.Context, c *app.RequestContext) {
+	if err := s.app.DeleteInteractiveTeller(c.Param("id")); err != nil {
+		writeError(c, consts.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(c, consts.StatusOK, map[string]string{"status": "ok"})
+}

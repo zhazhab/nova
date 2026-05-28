@@ -1,5 +1,5 @@
 import { Children, Fragment, cloneElement, isValidElement, memo, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Bot, CheckCircle2, ChevronDown, ChevronRight, Circle, CircleDot, Clock3, FileText, ListTodo } from 'lucide-react'
@@ -8,17 +8,18 @@ import type { ChatMessage } from '@/lib/api'
 interface MessageItemProps {
   message: ChatMessage
   highlightDialogue?: boolean
+  messageStyle?: CSSProperties
 }
 
 /** 单条消息组件，根据 role 渲染不同样式 */
-export const MessageItem = memo(function MessageItem({ message, highlightDialogue = false }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, highlightDialogue = false, messageStyle }: MessageItemProps) {
   const { role, content = '' } = message
 
   switch (role) {
     case 'user':
       return (
         <div className="flex justify-end">
-          <div className="max-w-[88%] rounded bg-[#2f7dd3] px-3 py-2 text-sm text-white whitespace-pre-wrap">
+          <div className="max-w-[88%] rounded bg-[#4a4d54] px-3 py-2 text-sm text-white whitespace-pre-wrap" style={messageStyle}>
             {content}
           </div>
         </div>
@@ -27,9 +28,9 @@ export const MessageItem = memo(function MessageItem({ message, highlightDialogu
     case 'assistant':
       return (
         <div className="flex justify-start">
-          <div className="chat-agent-message w-full text-sm text-[#c8ccd4]">
+          <div className="chat-agent-message w-full text-sm text-[#c8ccd4]" style={messageStyle}>
             <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#d7dbe2]">
-              <span className="flex h-5 w-5 items-center justify-center rounded border border-[#7c5cff]/50 bg-[#1b1c1f] text-[#b69cff]">
+              <span className="flex h-5 w-5 items-center justify-center rounded border border-[#5a5d64]/50 bg-[#1b1c1f] text-[#d7dbe2]">
                 <Bot className="h-3.5 w-3.5" />
               </span>
               Nova
@@ -84,16 +85,16 @@ export function ToolActivityBlock({ content }: { content: string }) {
 
   return (
     <div className="flex justify-start">
-      <div className="w-full rounded-lg border border-[#3a314f] bg-[#211f2b] px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+      <div className="w-full rounded-lg border border-[#303238] bg-[#202124] px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#7c5cff]/40 bg-[#2b2440] text-[#b69cff]">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#5a5d64]/40 bg-[#25262a] text-[#d7dbe2]">
             <Clock3 className="h-3.5 w-3.5 animate-pulse" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-[#d7dbe2]">
               <span className="font-medium">{activity.title}</span>
               {activity.toolName && (
-                <code className="rounded border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#c9b8ff]">
+                <code className="rounded border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#d7dbe2]">
                   {activity.toolName}
                 </code>
               )}
@@ -128,7 +129,7 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
         <div className="flex h-9 min-w-0 items-center gap-2 px-2.5">
           <ToolStatusIcon status={status} />
           <span className="shrink-0 font-medium text-[#d7dbe2]">调用工具</span>
-          <code className="shrink-0 rounded border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#c9b8ff]">
+          <code className="shrink-0 rounded border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#d7dbe2]">
             {name}
           </code>
           <span className="min-w-0 flex-1 truncate text-[#9aa1ad]">
@@ -137,7 +138,7 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
           {hasDetail && !isStreamingContent && (
             <button
               type="button"
-              className="shrink-0 text-[#8fb5ff] hover:text-[#c7d9ff]"
+              className="shrink-0 text-[#aeb4bf] hover:text-[#f0f2f5]"
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? '收起' : '详情'}
@@ -181,7 +182,7 @@ export function TodoListBlock({ message }: { message: ChatMessage }) {
     <div className="flex justify-start">
       <div className="w-full overflow-hidden rounded-md border border-[#303238] bg-[#23252a] text-xs">
         <div className="flex h-9 min-w-0 items-center gap-2 px-2.5">
-          <ListTodo className="h-3.5 w-3.5 shrink-0 text-[#7aa2f7]" />
+          <ListTodo className="h-3.5 w-3.5 shrink-0 text-[#a8adb7]" />
           <span className="shrink-0 font-medium text-[#d7dbe2]">待办列表</span>
           {total > 0 && (
             <span className="shrink-0 rounded-full border border-[#454956] bg-[#1b1c20] px-1.5 py-0.5 font-mono text-[11px] text-[#9aa1ad]">
@@ -220,7 +221,7 @@ function TodoListItem({ todo }: { todo: TodoItem }) {
   if (todo.status === 'in_progress') {
     return (
       <li className="flex items-start gap-2 py-0.5 leading-6">
-        <CircleDot className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-[#b69cff]" />
+        <CircleDot className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-pulse text-[#d7dbe2]" />
         <span className="text-[#e4e7ee]">{text}</span>
       </li>
     )
@@ -286,7 +287,7 @@ function ToolStatusIcon({ status }: { status: ChatMessage['status'] }) {
   if (status === 'error') {
     return <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-[#ff6b6b] text-[10px] text-[#ff6b6b]">!</span>
   }
-  return <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#7c5cff]/35 border-t-[#b69cff]" />
+  return <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-[#5a5d64]/35 border-t-[#d7dbe2]" />
 }
 
 /** 工具结果卡片，默认展示摘要，避免大段结果挤占对话区 */
@@ -315,7 +316,7 @@ function ToolResultBlock({ content }: { content: string }) {
               {canExpand && (
                 <button
                   type="button"
-                  className="shrink-0 text-[#8fb5ff] hover:text-[#c7d9ff]"
+                  className="shrink-0 text-[#aeb4bf] hover:text-[#f0f2f5]"
                   onClick={() => setExpanded(!expanded)}
                 >
                   {expanded ? '收起' : '展开'}
@@ -525,7 +526,7 @@ function renderInlineMarkdown(text: string, highlightDialogue = false): ReactNod
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
   return parts.map((part, index) => {
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={index} className="rounded bg-[#1b1c20] px-1 py-0.5 font-mono text-[0.9em] text-[#c9b8ff]">{part.slice(1, -1)}</code>
+      return <code key={index} className="rounded bg-[#1b1c20] px-1 py-0.5 font-mono text-[0.9em] text-[#d7dbe2]">{part.slice(1, -1)}</code>
     }
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={index} className="font-semibold text-[#e4e7ee]">{highlightDialogueText(part.slice(2, -2), highlightDialogue, `strong-${index}`)}</strong>

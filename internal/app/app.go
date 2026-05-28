@@ -226,6 +226,46 @@ func (a *App) AppendInteractiveTurn(storyID, branchID, user, narrative string) (
 	})
 }
 
+func (a *App) LoreItems() ([]book.LoreItem, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return nil, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).List()
+}
+
+func (a *App) CreateLoreItem(input book.LoreItemInput) (book.LoreItem, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return book.LoreItem{}, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).Create(input)
+}
+
+func (a *App) UpdateLoreItem(id string, input book.LoreItemInput) (book.LoreItem, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return book.LoreItem{}, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).Update(id, input)
+}
+
+func (a *App) DeleteLoreItem(id string) error {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).Delete(id)
+}
+
 // StartInteractiveTask 启动互动模式 Agent 任务，输出写回 interactive/story。
 func (a *App) StartInteractiveTask(storyID, branchID, message string) *Task {
 	a.mu.Lock()
@@ -300,6 +340,27 @@ func (a *App) InteractiveTeller(id string) (interactive.Teller, error) {
 		return interactive.Teller{}, ErrNoWorkspace
 	}
 	return interactive.NewTellerLibrary(a.cfg.NovaDir).Get(id)
+}
+
+func (a *App) CreateInteractiveTeller(teller interactive.Teller) (interactive.Teller, error) {
+	if a.cfg == nil || a.cfg.NovaDir == "" {
+		return interactive.Teller{}, ErrNoWorkspace
+	}
+	return interactive.NewTellerLibrary(a.cfg.NovaDir).Create(teller)
+}
+
+func (a *App) UpdateInteractiveTeller(id string, teller interactive.Teller) (interactive.Teller, error) {
+	if a.cfg == nil || a.cfg.NovaDir == "" {
+		return interactive.Teller{}, ErrNoWorkspace
+	}
+	return interactive.NewTellerLibrary(a.cfg.NovaDir).Update(id, teller)
+}
+
+func (a *App) DeleteInteractiveTeller(id string) error {
+	if a.cfg == nil || a.cfg.NovaDir == "" {
+		return ErrNoWorkspace
+	}
+	return interactive.NewTellerLibrary(a.cfg.NovaDir).Delete(id)
 }
 
 // ActiveInteractiveTask 返回当前互动模式活跃任务（可能为 nil）。
@@ -766,7 +827,7 @@ func (a *App) StartTask(req agent.ChatRequest) *Task {
 					converted = append(converted, agent.StyleRule{Scene: r.Scene, Styles: r.Styles})
 				}
 				req.StyleRules = converted
-				log.Printf("[agent-task] inject style rules count=%d", len(converted))
+				log.Printf("[agent-task] inject style rules count=%d rules=%q", len(converted), appStyleRuleNames(converted))
 			}
 		} else {
 			log.Printf("[agent-task] load layered settings for style rules failed err=%v", err)
@@ -784,6 +845,14 @@ func (a *App) StartTask(req agent.ChatRequest) *Task {
 	a.mu.Unlock()
 
 	return task
+}
+
+func appStyleRuleNames(rules []agent.StyleRule) []string {
+	names := make([]string, 0, len(rules))
+	for _, rule := range rules {
+		names = append(names, fmt.Sprintf("%s -> %v", rule.Scene, rule.Styles))
+	}
+	return names
 }
 
 func (a *App) abortActiveTaskLocked() {

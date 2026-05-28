@@ -14,15 +14,16 @@ describe('InteractiveLayout', () => {
     expect(container.querySelector('[data-slot="select-trigger"]')).toBeInTheDocument()
     expect(container.querySelector('[data-slot="button"]')).toBeInTheDocument()
     expect(container.querySelector('[data-slot="tabs-list"]')).toBeInTheDocument()
-    expect(screen.getByTestId('interactive-shell')).toHaveClass('rounded-xl')
-    expect(screen.getByTestId('story-stage-card')).toHaveClass('rounded-xl')
+    expect(screen.getByText('创作者')).toBeInTheDocument()
+    expect(screen.getByTestId('interactive-shell')).not.toHaveClass('rounded-xl')
+    expect(screen.getByTestId('story-stage-card')).not.toHaveClass('rounded-xl')
   })
 
   it('can hide interactive side panels independently', async () => {
     render(<InteractiveLayout leftPanelVisible={false} rightPanelVisible={false} />)
 
     expect(await screen.findByText('故事舞台 · 当前分支 main')).toBeInTheDocument()
-    expect(screen.queryByText('资料库')).not.toBeInTheDocument()
+    expect(screen.queryByText('设定条目与 Markdown 正文')).not.toBeInTheDocument()
     expect(screen.queryByText('场景记忆')).not.toBeInTheDocument()
   })
 
@@ -77,13 +78,13 @@ describe('InteractiveLayout', () => {
 
     const view = render(<InteractiveLayout workspace="/books/old" />)
 
-    expect(await screen.findByText('旧书回合')).toBeInTheDocument()
+    expect((await screen.findAllByText('旧书回合')).length).toBeGreaterThan(0)
 
     activeWorkspace = 'new'
     view.rerender(<InteractiveLayout workspace="/books/new" />)
 
-    expect(await screen.findByText('新书回合')).toBeInTheDocument()
-    expect(screen.getByText('新的场景展开。')).toBeInTheDocument()
+    expect((await screen.findAllByText('新书回合')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('新的场景展开。').length).toBeGreaterThan(0)
     await waitFor(() => expect(screen.queryByText('旧角色')).not.toBeInTheDocument())
   })
 
@@ -122,8 +123,8 @@ describe('InteractiveLayout', () => {
 
     render(<InteractiveLayout />)
 
-    expect(await screen.findByText('我推开酒馆的门')).toBeInTheDocument()
-    expect(screen.getByText('门后传来低沉的风声。')).toBeInTheDocument()
+    expect((await screen.findAllByText('我推开酒馆的门')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('门后传来低沉的风声。').length).toBeGreaterThan(0)
   })
 
   it('refreshes stage and scene memory from the selected branch snapshot', async () => {
@@ -217,7 +218,9 @@ describe('InteractiveLayout', () => {
     expect(await screen.findByText('进入旧酒馆')).toBeInTheDocument()
     expect(screen.getByText('林川')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /剧情路线图/ }))
+    if (!screen.queryByTestId('branch-graph-canvas')) {
+      fireEvent.click(screen.getByRole('button', { name: /剧情路线图/ }))
+    }
     fireEvent.click(await screen.findByText('侧巷'))
     await waitFor(() => expect(switchCalls).toBeGreaterThan(0))
 
@@ -290,5 +293,62 @@ describe('InteractiveLayout', () => {
     expect(await screen.findByText('林川', {}, { timeout: 3000 })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('同步中')).not.toBeInTheDocument())
     expect(snapshotRequests).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows the branch graph after refresh without requiring a manual expand click', async () => {
+    window.localStorage.removeItem('nova-interactive-branch-timeline-expanded')
+    window.localStorage.setItem('nova-interactive-main-vertical', JSON.stringify({ 'stage-area': 92, 'branch-timeline': 8 }))
+    useInteractiveStore.setState({
+      stories: [],
+      tellers: [],
+      branches: [],
+      snapshot: null,
+      currentStoryId: '',
+      currentBranchId: 'main',
+      submode: 'story',
+    })
+    server.use(
+      http.get('/api/interactive/stories', () => HttpResponse.json({
+        current_story_id: 'st_1',
+        stories: [{ id: 'st_1', title: '末日开端', origin: '', story_teller_id: 'classic', created_at: '', updated_at: '', branches: 2, events: 2 }],
+      })),
+      http.get('/api/interactive/stories/:id/branches', () => HttpResponse.json({
+        branches: [
+          { id: 'main', head: 'ev_main', title: '主线', created_at: '', current: true },
+          { id: 'br_alt', head: 'ev_alt', from: 'main', from_event: 'ev_main', title: '支线', created_at: '', current: false },
+        ],
+      })),
+      http.get('/api/interactive/stories/:id/snapshot', () => HttpResponse.json({
+        story_id: 'st_1',
+        branch_id: 'main',
+        turns: [{
+          id: 'ev_main',
+          parent_id: null,
+          branch_id: 'main',
+          ts: '',
+          user: '进入旧酒馆',
+          narrative: '酒馆里只剩炉火。',
+        }],
+        state: { on_stage: [], characters: {}, events: [] },
+        graph: {
+          nodes: [
+            { id: 'ev_main', branch_id: 'main', title: '进门', summary: '旧酒馆', ts: '', current: true, head: true },
+            { id: 'ev_alt', parent_id: 'ev_main', branch_id: 'br_alt', title: '侧巷', summary: '铃声', ts: '', current: false, head: true },
+          ],
+          branches: [
+            { id: 'main', head: 'ev_main', title: '主线', created_at: '', current: true },
+            { id: 'br_alt', head: 'ev_alt', from: 'main', from_event: 'ev_main', title: '支线', created_at: '', current: false },
+          ],
+        },
+      })),
+    )
+
+    render(<InteractiveLayout />)
+
+    expect(await screen.findByTestId('branch-graph-canvas')).toBeInTheDocument()
+    expect(await screen.findByText('侧巷')).toBeInTheDocument()
+
+    window.localStorage.removeItem('nova-interactive-branch-timeline-expanded')
+    window.localStorage.removeItem('nova-interactive-main-vertical')
   })
 })

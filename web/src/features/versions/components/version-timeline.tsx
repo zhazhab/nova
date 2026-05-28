@@ -39,20 +39,20 @@ export function VersionTimeline({
         return (
           <div
             key={version.id}
-            className={`relative rounded px-1.5 py-1 hover:bg-[#2a2d33] ${selected ? 'bg-[#26364a]' : ''}`}
+            className={`relative rounded px-1.5 py-1 hover:bg-[#2a2d33] ${selected ? 'bg-[#303238]' : ''}`}
           >
-            <span className="absolute -left-[13px] top-2 h-2 w-2 rounded-full bg-[#2f7dd3]" />
+            <span className="absolute -left-[13px] top-2 h-2 w-2 rounded-full bg-[#4a4d54]" />
             <button
               type="button"
               className="w-full text-left"
               onClick={() => onSelectVersion?.(version)}
             >
               <div className="flex items-center gap-1 truncate text-[#d7dbe2]" title={version.title}>
-                <GitCommit className="h-3 w-3 shrink-0 text-[#7aa2f7]" />
+                <GitCommit className="h-3 w-3 shrink-0 text-[#a8adb7]" />
                 <span className="truncate">{version.title || '(无说明)'}</span>
               </div>
               <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[#858b96]">
-                {version.description && <span className="font-mono text-[#7aa2f7]">{version.description}</span>}
+                {version.description && <span className="font-mono text-[#a8adb7]">{version.description}</span>}
                 {version.author && <span className="min-w-0 flex-1 truncate">{version.author}</span>}
               </div>
               <div className="mt-0.5 truncate text-[10px] text-[#666d78]">{version.createdAt}</div>

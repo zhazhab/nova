@@ -56,6 +56,69 @@ func logSystemPromptComposition(mode, workspace, creator, stateContext, instruct
 		promptPartSummary(stateContext),
 		promptPartSummary(instruction),
 	)
+	log.Printf("[agent-prompt] system sources mode=%s workspace=%s sources=%s", mode, workspace, systemPromptSourceSummary(mode, creator, stateContext))
+}
+
+func systemPromptSourceSummary(mode, creator, stateContext string) string {
+	contextLog := newContextBuildLog()
+	if strings.TrimSpace(creator) != "" {
+		contextLog.add("系统提示", "CREATOR.md", creator, "创作者指令")
+	}
+	for _, section := range promptStateSections(stateContext) {
+		contextLog.add("作品状态", section.Title, section.Content, section.Source)
+	}
+	contextLog.add("系统提示", "Nova "+mode+" 内置规则", "基础规则、工具边界、工作流约束", "")
+	return contextLog.String()
+}
+
+type promptStateSection struct {
+	Title   string
+	Source  string
+	Content string
+}
+
+func promptStateSections(stateContext string) []promptStateSection {
+	stateContext = strings.TrimSpace(stateContext)
+	if stateContext == "" {
+		return nil
+	}
+	blocks := strings.Split("\n"+stateContext, "\n## ")
+	sections := make([]promptStateSection, 0, len(blocks))
+	for _, block := range blocks {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+		title, content, _ := strings.Cut(block, "\n")
+		title = strings.TrimSpace(title)
+		content = strings.TrimSpace(content)
+		if title == "" || content == "" {
+			continue
+		}
+		sections = append(sections, promptStateSection{
+			Title:   title,
+			Source:  promptStateSectionSource(title),
+			Content: content,
+		})
+	}
+	return sections
+}
+
+func promptStateSectionSource(title string) string {
+	switch title {
+	case "当前大纲":
+		return "setting/outline.md"
+	case "角色卡片":
+		return "setting/characters.md"
+	case "世界观设定":
+		return "setting/world-building.md"
+	case "当前进度":
+		return "setting/progress.md"
+	case "资料库":
+		return ".nova/lore/items.json"
+	default:
+		return "作品状态注入"
+	}
 }
 
 func promptPartSummary(s string) string {
@@ -66,6 +129,7 @@ func promptPartSummary(s string) string {
 		"chars=" + intString(utf8.RuneCountInString(s)),
 		"lines=" + intString(promptLineCount(s)),
 		"sha=" + shortSHA256(s),
+		"preview=" + strconv.Quote(safeLogPreview(s, 80)),
 	}, ",")
 }
 

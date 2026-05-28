@@ -1,33 +1,69 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { MessageSquareText, PenLine, Route, Send, Square } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { GitBranch, MessageSquareText, Send, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { MessageList } from '@/components/Chat/MessageList'
 import type { ChatMessage } from '@/lib/api'
+import { fetchSettings } from '@/features/settings/api'
+import { fontStackFor } from '@/features/settings/font-options'
 import { abortInteractiveChat, sendInteractiveMessage } from '../api'
 import { createInteractiveNarrativeFilter } from '../stream-parser'
+import { emptyStoryStageRun, useInteractiveStore } from '../stores/interactive-store'
+import type { StoryStageRunState } from '../stores/interactive-store'
 import type { Snapshot } from '../types'
 
 interface StoryStageProps {
+  workspace?: string
   storyId: string
   branchId: string
   snapshot: Snapshot | null
   onDone: () => void
 }
 
-export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStageProps) {
+const DEFAULT_STAGE_FONT_SIZE = 16
+const DEFAULT_STAGE_LINE_HEIGHT = 1.78
+const DEFAULT_READING_FONT = 'source-han-serif'
+const EMPTY_STAGE_RUN = emptyStoryStageRun()
+const stageAbortControllers = new Map<string, AbortController>()
+
+export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: StoryStageProps) {
   const [input, setInput] = useState('')
-  const [workspaceMode, setWorkspaceMode] = useState('dialogue')
-  const [streaming, setStreaming] = useState(false)
-  const [activityContent, setActivityContent] = useState('')
-  const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([])
-  const abortControllerRef = useRef<AbortController | null>(null)
   const snapshotKey = `${storyId || 'none'}:${snapshot?.branch_id || branchId || 'main'}:${snapshot?.turns?.[snapshot.turns.length - 1]?.id || 'empty'}`
-  const stageKey = `${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
+  const stageKey = `${workspace || 'current'}:${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
+  const { storyStageRuns, setStoryStageRun, clearStoryStageRun } = useInteractiveStore()
+  const stageRun = storyStageRuns[stageKey] || EMPTY_STAGE_RUN
+  const streaming = stageRun.streaming
+  const activityContent = stageRun.activityContent
+  const liveMessages = stageRun.liveMessages
   const liveStageKeyRef = useRef(stageKey)
   const previousSnapshotKeyRef = useRef(snapshotKey)
+  const stageTypography = useStageTypography()
+  const stageTextStyle = useMemo<CSSProperties>(() => ({
+    fontSize: `${stageTypography.fontSize}px`,
+    lineHeight: stageTypography.lineHeight,
+    fontFamily: stageTypography.fontFamily,
+  }), [stageTypography.fontFamily, stageTypography.fontSize, stageTypography.lineHeight])
+
+  const updateStageRun = useCallback((updater: Partial<StoryStageRunState> | ((current: StoryStageRunState) => StoryStageRunState)) => {
+    setStoryStageRun(stageKey, updater)
+  }, [setStoryStageRun, stageKey])
+
+  const setStageStreaming = useCallback((value: boolean) => {
+    updateStageRun({ streaming: value })
+  }, [updateStageRun])
+
+  const setStageActivityContent = useCallback((value: string) => {
+    updateStageRun({ activityContent: value })
+  }, [updateStageRun])
+
+  const setStageLiveMessages = useCallback((updater: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => {
+    updateStageRun((current) => ({
+      ...current,
+      liveMessages: typeof updater === 'function' ? updater(current.liveMessages) : updater,
+    }))
+  }, [updateStageRun])
 
   const latestLiveTurn = useMemo(() => {
     if (liveMessages.length === 0) return null
@@ -52,11 +88,11 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
     if (previousSnapshotKeyRef.current === snapshotKey) return
     if (streaming) return
     previousSnapshotKeyRef.current = snapshotKey
-    setActivityContent('')
+    setStageActivityContent('')
     if (!duplicatePersistedLiveTurn) {
-      setLiveMessages([])
+      clearStoryStageRun(stageKey)
     }
-  }, [duplicatePersistedLiveTurn, snapshotKey, streaming])
+  }, [clearStoryStageRun, duplicatePersistedLiveTurn, setStageActivityContent, snapshotKey, stageKey, streaming])
 
   const historyMessages = useMemo<ChatMessage[]>(() => {
     const turns = snapshot?.turns || []
@@ -75,17 +111,18 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
 
   const messages = useMemo(() => [...historyMessages, ...liveMessages], [historyMessages, liveMessages])
   const scrollResetKey = `${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
+  const title = pickSceneTitle(snapshot, branchId)
 
   const send = async () => {
     const message = input.trim()
     if (!message || !storyId || streaming) return
     setInput('')
-    setActivityContent('正在连接 AI Agent…')
-    setLiveMessages([{ role: 'user', content: message }])
+    setStageActivityContent('正在连接 AI Agent…')
+    setStageLiveMessages([{ role: 'user', content: message }])
     liveStageKeyRef.current = stageKey
-    setStreaming(true)
+    setStageStreaming(true)
     const abortController = new AbortController()
-    abortControllerRef.current = abortController
+    stageAbortControllers.set(stageKey, abortController)
     const narrativeFilter = createInteractiveNarrativeFilter()
     try {
       const stream = await sendInteractiveMessage({ mode: 'story', story_id: storyId, branch: branchId, message, signal: abortController.signal })
@@ -101,45 +138,45 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
               collapseNonNarrativeMessages()
               appendAssistantMessage(visible)
             }
-            setActivityContent('')
+            setStageActivityContent('')
             break
           }
           case 'thinking': {
             const data = JSON.parse(value.data)
             appendThinkingMessage(data.content || '')
-            setActivityContent('正在思考…')
+            setStageActivityContent('正在思考…')
             break
           }
           case 'tool_call': {
             const data = JSON.parse(value.data)
-            setActivityContent(`正在处理 ${data.name || '工具调用'}…`)
+            setStageActivityContent(`正在处理 ${data.name || '工具调用'}…`)
             break
           }
           case 'tool_args_delta': {
             break
           }
           case 'tool_result': {
-            setActivityContent('')
+            setStageActivityContent('')
             break
           }
           case 'error': {
             const data = JSON.parse(value.data)
-            setActivityContent('')
-            setLiveMessages((prev) => [...prev, { role: 'error', content: data.message || data.error || '未知错误' }])
+            setStageActivityContent('')
+            setStageLiveMessages((prev) => [...prev, { role: 'error', content: data.message || data.error || '未知错误' }])
             break
           }
           case 'done': {
             const visible = narrativeFilter.flush()
             collapseNonNarrativeMessages()
             if (visible) appendAssistantMessage(visible)
-            setActivityContent('完成')
+            setStageActivityContent('完成')
             break
           }
           case 'aborted': {
             const visible = narrativeFilter.flush()
             collapseNonNarrativeMessages()
             if (visible) appendAssistantMessage(visible)
-            setActivityContent('已中断')
+            setStageActivityContent('已中断')
             break
           }
         }
@@ -147,90 +184,95 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
       await onDone()
     } catch (error) {
       if (!isAbortError(error)) {
-        setActivityContent('')
-        setLiveMessages((prev) => [...prev, { role: 'error', content: error instanceof Error ? error.message : '互动 Agent 执行失败' }])
+        setStageActivityContent('')
+        setStageLiveMessages((prev) => [...prev, { role: 'error', content: error instanceof Error ? error.message : '互动 Agent 执行失败' }])
       }
     } finally {
-      setStreaming(false)
-      abortControllerRef.current = null
-      setActivityContent('')
+      setStageStreaming(false)
+      stageAbortControllers.delete(stageKey)
+      setStageActivityContent('')
     }
   }
 
   const stop = () => {
     void abortInteractiveChat()
-    abortControllerRef.current?.abort()
-    setActivityContent('正在中断…')
+    stageAbortControllers.get(stageKey)?.abort()
+    setStageActivityContent('正在中断…')
   }
 
   return (
-    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#17191d] p-4">
-      <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#343b47] bg-[#101216] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[#262c35] px-5">
+    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#1b1c1f]">
+      <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#1b1c1f]">
+        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[#303238] bg-[#1f2023]/95 px-4 shadow-[inset_0_-1px_0_rgba(255,255,255,0.02)] backdrop-blur">
           <div className="min-w-0">
-            <div className="text-[11px] font-medium text-[#8893a4]">故事舞台 · 当前分支 {branchId || 'main'}</div>
-            <div className="truncate text-sm font-semibold text-[#e2e6ee]">主创作区</div>
+            <div className="text-[10px] font-medium leading-4 text-[#8893a4]">故事舞台 · 当前分支 {branchId || 'main'}</div>
+            <div className="truncate text-xs font-semibold leading-5 text-[#eef3fb]">{title}</div>
           </div>
           <div className="flex items-center gap-2">
-            <Tabs value={workspaceMode} onValueChange={setWorkspaceMode}>
-              <TabsList className="h-8 bg-[#1f2430]">
-                <TabsTrigger value="draft" className="gap-1.5 px-2.5 text-xs">
-                  <PenLine className="h-3.5 w-3.5" />
-                  正文
-                </TabsTrigger>
-                <TabsTrigger value="dialogue" className="gap-1.5 px-2.5 text-xs">
-                  <MessageSquareText className="h-3.5 w-3.5" />
-                  对话
-                </TabsTrigger>
-                <TabsTrigger value="branch" className="gap-1.5 px-2.5 text-xs">
-                  <Route className="h-3.5 w-3.5" />
-                  推演
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Badge variant="outline" className="border-[#384150] bg-[#1c222b] text-[#8f98a8]">{snapshot?.turns?.length || 0} 回合</Badge>
+            <div className="flex h-7 items-center gap-1.5 rounded-md border border-[#303238] bg-[#25262a] px-2 text-[11px] text-[#c5c9d1] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <MessageSquareText className="h-3.5 w-3.5 text-[#a8adb7]" />
+              互动创作
+            </div>
+            <Badge variant="outline" className="h-7 gap-1.5 border-[#303238] bg-[#25262a] px-2 text-[11px] text-[#9aa0aa]">
+              <GitBranch className="h-3 w-3" />
+              {snapshot?.turns?.length || 0} 回合
+            </Badge>
           </div>
         </div>
-        {messages.length === 0 && !streaming ? (
-          <div className="m-5 flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-[#343b47] bg-[#171b21]/80 text-sm text-[#858b96]">
-            输入第一句话，开始互动故事。
-          </div>
-        ) : (
-          <MessageList
-            messages={messages}
-            isStreaming={streaming}
-            activityContent={activityContent}
-            highlightDialogue
-            scrollResetKey={scrollResetKey}
-            bottomPaddingClassName="pb-32"
-          />
-        )}
+
+        <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1b1c1f]">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#1b1c1f]">
+            <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#303238] bg-[#202124] px-4 text-[11px] text-[#8b95a6]">
+              <span className="flex items-center gap-1.5">
+                <MessageSquareText className="h-3.5 w-3.5 text-[#a8adb7]" />
+                指令流
+              </span>
+              <span>{messages.length} 条记录</span>
+            </div>
+            {messages.length === 0 && !streaming ? (
+              <div className="m-5 flex min-h-0 flex-1 items-center justify-center rounded-md border border-dashed border-[#3a3d44] bg-[#202124]/80 text-sm text-[#858b96] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                输入第一句话，开始互动故事。
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                isStreaming={streaming}
+                activityContent={activityContent}
+                highlightDialogue
+                scrollResetKey={scrollResetKey}
+                bottomPaddingClassName="pb-32"
+                messageStyle={stageTextStyle}
+              />
+            )}
+          </section>
+        </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[#17191d] via-[#17191d]/95 to-transparent pt-8">
-        <div className="pointer-events-auto rounded-xl border border-[#343b47] bg-[#101216]/95 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur">
-        <div className="flex items-center gap-3">
-          <Textarea
-            className="h-16 min-h-16 flex-1 resize-none border-[#343b47] bg-[#1b2028] text-sm leading-6 text-[#d7dbe2] placeholder:text-[#778091] focus-visible:ring-1"
-            value={input}
-            placeholder="你要做什么？"
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                void send()
-              }
-            }}
-          />
-          <Button
-            className={`h-16 w-24 text-white ${streaming ? 'bg-[#c95050] hover:bg-[#e05d5d]' : 'bg-[#2d6fb8] hover:bg-[#347dca]'}`}
-            disabled={streaming ? false : (!storyId || !input.trim())}
-            onClick={() => { streaming ? stop() : void send() }}
-            aria-label={streaming ? '中断 AI 执行' : '发送'}
-          >
-            {streaming ? <Square className="h-4 w-4 fill-current" /> : <Send className="h-4 w-4" />}
-            {streaming ? '中断' : '发送'}
-          </Button>
-        </div>
+      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[#1b1c1f] via-[#1b1c1f]/92 to-transparent pt-8">
+        <div className="pointer-events-auto rounded-md border border-[#303238] bg-[#202124]/96 p-3 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur">
+          <div className="flex items-center gap-3">
+            <Textarea
+              className="h-14 min-h-14 flex-1 resize-none border-[#3a3d44] bg-[#1b1c1f] text-sm leading-6 text-[#d7dbe2] placeholder:text-[#777d87] focus-visible:border-[#5a5d64] focus-visible:ring-1 focus-visible:ring-[#5a5d64]/35"
+              style={stageTextStyle}
+              value={input}
+              placeholder="你要做什么？"
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void send()
+                }
+              }}
+            />
+            <Button
+              className={`h-14 w-24 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${streaming ? 'bg-[#c95050] hover:bg-[#e05d5d]' : 'bg-[#3a3d44] hover:bg-[#4a4d54]'}`}
+              disabled={streaming ? false : (!storyId || !input.trim())}
+              onClick={() => { streaming ? stop() : void send() }}
+              aria-label={streaming ? '中断 AI 执行' : '发送'}
+            >
+              {streaming ? <Square className="h-4 w-4 fill-current" /> : <Send className="h-4 w-4" />}
+              {streaming ? '中断' : '发送'}
+            </Button>
+          </div>
         </div>
       </div>
     </main>
@@ -238,7 +280,7 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
 
   function appendAssistantMessage(content: string) {
     if (!content) return
-    setLiveMessages((prev) => {
+    setStageLiveMessages((prev) => {
       const last = prev[prev.length - 1]
       if (last?.role === 'assistant' && last.streaming) {
         return [...prev.slice(0, -1), { ...last, content: `${last.content || ''}${content}` }]
@@ -249,7 +291,7 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
 
   function appendThinkingMessage(content: string) {
     if (!content) return
-    setLiveMessages((prev) => {
+    setStageLiveMessages((prev) => {
       const last = prev[prev.length - 1]
       if (last?.role === 'thinking') {
         return [...prev.slice(0, -1), { ...last, content: `${last.content || ''}${content}`, streaming: true }]
@@ -259,12 +301,53 @@ export function StoryStage({ storyId, branchId, snapshot, onDone }: StoryStagePr
   }
 
   function collapseNonNarrativeMessages() {
-    setLiveMessages((prev) => prev.map((msg) => (
+    setStageLiveMessages((prev) => prev.map((msg) => (
       msg.role === 'thinking' || msg.role === 'tool_call'
         ? { ...msg, streaming: false, status: msg.role === 'tool_call' ? (msg.status === 'running' ? 'success' : msg.status) : msg.status }
         : msg
     )))
   }
+}
+
+function useStageTypography() {
+  const [typography, setTypography] = useState({
+    fontSize: DEFAULT_STAGE_FONT_SIZE,
+    lineHeight: DEFAULT_STAGE_LINE_HEIGHT,
+    fontFamily: fontStackFor(DEFAULT_READING_FONT, DEFAULT_READING_FONT),
+  })
+
+  const load = useCallback(async () => {
+    try {
+      const settings = await fetchSettings()
+      const effective = settings.effective || {}
+      setTypography({
+        fontSize: clampNumber(effective.interactive_stage_font_size, 13, 24, DEFAULT_STAGE_FONT_SIZE),
+        lineHeight: clampNumber(effective.interactive_stage_line_height, 1.35, 2.4, DEFAULT_STAGE_LINE_HEIGHT),
+        fontFamily: fontStackFor(effective.reading_font_family, DEFAULT_READING_FONT),
+      })
+    } catch (error) {
+      console.warn('[interactive-stage] 加载故事舞台显示设置失败', error)
+      setTypography({
+        fontSize: DEFAULT_STAGE_FONT_SIZE,
+        lineHeight: DEFAULT_STAGE_LINE_HEIGHT,
+        fontFamily: fontStackFor(DEFAULT_READING_FONT, DEFAULT_READING_FONT),
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+    window.addEventListener('nova:settings-updated', load)
+    return () => window.removeEventListener('nova:settings-updated', load)
+  }, [load])
+
+  return typography
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numberValue)) return fallback
+  return Math.min(max, Math.max(min, numberValue))
 }
 
 function isAbortError(error: unknown) {
@@ -273,4 +356,11 @@ function isAbortError(error: unknown) {
 
 function normalizeMessageContent(value: string) {
   return value.replace(/\r\n/g, '\n').trim()
+}
+
+function pickSceneTitle(snapshot: Snapshot | null, branchId: string) {
+  const current = snapshot?.graph?.nodes?.find((node) => node.current && node.branch_id === (snapshot.branch_id || branchId)) ||
+    snapshot?.graph?.nodes?.find((node) => node.head && node.branch_id === (snapshot.branch_id || branchId))
+  if (current?.title) return current.title
+  return '主创作区'
 }

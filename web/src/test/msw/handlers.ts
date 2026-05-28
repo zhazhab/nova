@@ -41,6 +41,15 @@ export const handlers = [
   http.get('/api/interactive/tellers', () => HttpResponse.json({ tellers: [{ id: 'classic', name: '经典叙事者', description: '平衡叙事', random_event_rate: 0.15, tags: ['通用'], custom: false }] })),
   http.get('/api/workspace/file', () => HttpResponse.json({ path: 'setting/characters.md', content: '# Characters' })),
   http.get('/api/workspace/summary', () => HttpResponse.json({ title: '末日开端', author: '', chapter_count: 0, total_words: 0, chapters: [] })),
+  http.get('/api/settings', () => HttpResponse.json({
+    default: {},
+    global: {},
+    user: {},
+    workspace: {},
+    effective: { max_open_tabs: 5, ui_font_family: 'system-sans', reading_font_family: 'source-han-serif', interactive_stage_font_size: 16, interactive_stage_line_height: 1.78 },
+    paths: { nova_dir: '', user_config: '', workspace_config: '' },
+  })),
+  http.get('/api/lore/items', () => HttpResponse.json({ items: [] })),
   http.get('/api/styles', () => HttpResponse.json({ styles: ['古龙.md', '番茄.txt'] })),
   http.post('/api/command', async ({ request }) => {
     const body = await request.json() as { command?: string }

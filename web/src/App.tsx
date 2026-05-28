@@ -9,6 +9,7 @@ import { HomeView } from '@/components/Home/HomeView'
 import { SettingsView } from '@/features/settings/SettingsView'
 import { InteractiveLayout } from '@/features/interactive/components/InteractiveLayout'
 import { fetchSettings } from '@/features/settings/api'
+import { fontStackFor } from '@/features/settings/font-options'
 import { importCharacterCard } from '@/lib/api'
 import { WorkspaceLayout } from '@/components/layout/workspace-layout'
 import { CommandPalette } from '@/components/common/command-palette'
@@ -26,8 +27,7 @@ import {
   FileText,
   GitBranch,
   FolderTree,
-  PanelLeft,
-  PanelRight,
+  MessageSquareText,
   PenLine,
   RefreshCw,
   SearchCheck,
@@ -153,6 +153,7 @@ function App() {
   const [openTabs, setOpenTabs] = useState<Tab[]>([])
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null)
   const [maxOpenTabs, setMaxOpenTabs] = useState<number>(MAX_OPEN_TABS_FALLBACK)
+  const [novaDir, setNovaDir] = useState('')
   const [sidebarView, setSidebarView] = useState<'outline' | 'files'>('outline')
   const characterCardInputRef = useRef<HTMLInputElement>(null)
   const chatBootstrappedRef = useRef(false)
@@ -228,7 +229,7 @@ function App() {
     void Promise.all([loadSessions(), loadHistory()]).then(() => resumeActiveChat())
   }, [loadHistory, loadSessions, resumeActiveChat])
 
-  // 拉取分层配置中的 max_open_tabs（用户/工作区切换时也需重新拉取，因为工作区可能覆盖该值）
+  // 拉取分层配置中的 max_open_tabs 与字体配置（用户/工作区切换时也需重新拉取，因为工作区可能覆盖这些值）
   useEffect(() => {
     let cancelled = false
     const reload = () => {
@@ -237,8 +238,10 @@ function App() {
           if (cancelled) return
           const v = data?.effective?.max_open_tabs
           if (typeof v === 'number' && v >= 1) setMaxOpenTabs(Math.floor(v))
+          setNovaDir(data?.paths?.nova_dir || '')
+          applyFontSettings(data?.effective?.ui_font_family, data?.effective?.reading_font_family)
         })
-        .catch((e) => console.warn('加载 max_open_tabs 失败', e))
+        .catch((e) => console.warn('加载界面配置失败', e))
     }
     reload()
     const onUpdated = () => reload()
@@ -466,27 +469,16 @@ function App() {
   })
 
   const topBar = (
-    <header className="flex h-7 shrink-0 items-center border-b border-[#303238] bg-[#202124] px-2 text-xs text-[#9aa0aa]">
-      <div className="font-medium text-[#d7dbe2]">Nova</div>
-      <div className="ml-3 flex items-center gap-1">
-        <button
-          type="button"
-          className={`rounded-md px-3 py-0.5 text-xs ${mode === 'ide' ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'}`}
-          onClick={() => setMode('ide')}
-        >
-          IDE
-        </button>
-        <button
-          type="button"
-          className={`rounded-md px-3 py-0.5 text-xs ${mode === 'interactive' ? 'bg-[#2f7dd3] text-white' : 'text-[#9aa0aa] hover:bg-[#303238]'}`}
-          onClick={() => setMode('interactive')}
-        >
-          Interactive
-        </button>
+    <header className="nova-topbar grid h-10 shrink-0 grid-cols-[auto_1fr_auto] items-center border-b px-3 text-xs">
+      <div className="flex items-center gap-3">
+        <div className="font-semibold text-[var(--nova-text)]">Nova</div>
       </div>
-      <div className="ml-4 flex min-w-0 items-center gap-1.5 border-l border-[#303238] pl-3" title={workspace || currentBookName}>
-        <BookOpen className="h-3.5 w-3.5 shrink-0 text-[#7aa2f7]" />
-        <span className="truncate font-medium text-[#d7dbe2]">{currentBookName}</span>
+      <div className="mx-auto flex min-w-0 max-w-[520px] items-center justify-center gap-1.5" title={workspace || currentBookName}>
+        <BookOpen className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
+        <span className="truncate font-medium text-[var(--nova-text)]">{currentBookName}</span>
+      </div>
+      <div className="flex items-center justify-end gap-2 text-[11px] text-[var(--nova-text-faint)]">
+        <span>{mode === 'interactive' ? '互动工作台' : '小说 IDE'}</span>
       </div>
     </header>
   )
@@ -496,60 +488,55 @@ function App() {
       <TooltipIconButton
         label="显示/隐藏项目结构"
         onClick={() => setProjectVisible((value) => !value)}
-        className={`mb-4 hover:bg-[#303238] ${projectVisible ? 'text-[#d7dbe2]' : 'text-[#6f7580]'}`}
+        className={`nova-icon-button mb-2 ${projectVisible ? 'is-active' : ''}`}
       >
         <FolderTree className="h-4 w-4" />
       </TooltipIconButton>
       <TooltipIconButton
         label="显示/隐藏 创作Agent"
         onClick={() => setRightPanel(aiVisible ? null : 'ai')}
-        className={`mb-4 hover:bg-[#303238] ${aiVisible ? 'text-[#d7dbe2]' : 'text-[#6f7580]'}`}
+        className={`nova-icon-button mb-2 ${aiVisible ? 'is-active' : ''}`}
       >
         <Bot className="h-4 w-4" />
       </TooltipIconButton>
       <TooltipIconButton
         label="版本管理"
         onClick={() => setRightPanel(versionsVisible ? null : 'versions')}
-        className={`mb-4 hover:bg-[#303238] ${versionsVisible ? 'text-[#d7dbe2]' : 'text-[#6f7580]'}`}
+        className={`nova-icon-button mb-2 ${versionsVisible ? 'is-active' : ''}`}
       >
         <GitBranch className="h-4 w-4" />
       </TooltipIconButton>
     </>
   )
 
-  const interactiveActivityButtons = (
-    <>
-      <TooltipIconButton
-        label="显示/隐藏互动资料库"
-        onClick={() => setInteractiveLeftVisible((value) => !value)}
-        className={`mb-4 hover:bg-[#303238] ${interactiveLeftVisible ? 'text-[#d7dbe2]' : 'text-[#6f7580]'}`}
-      >
-        <PanelLeft className="h-4 w-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        label="显示/隐藏场景记忆"
-        onClick={() => setInteractiveRightVisible((value) => !value)}
-        className={`mb-4 hover:bg-[#303238] ${interactiveRightVisible ? 'text-[#d7dbe2]' : 'text-[#6f7580]'}`}
-      >
-        <PanelRight className="h-4 w-4" />
-      </TooltipIconButton>
-    </>
-  )
-
   const activityBar = (
-    <aside className="flex w-9 shrink-0 flex-col items-center border-r border-[#303238] bg-[#202124] py-2 text-[#7f8590]">
+    <aside className="nova-activity-bar flex w-16 shrink-0 flex-col items-center gap-2 border-r p-3">
+      <TooltipIconButton
+        label="写作"
+        onClick={() => setMode('ide')}
+        className={`nova-icon-button ${mode === 'ide' ? 'is-active' : ''}`}
+      >
+        <PenLine className="h-4 w-4" />
+      </TooltipIconButton>
+      <TooltipIconButton
+        label="互动"
+        onClick={() => setMode('interactive')}
+        className={`nova-icon-button ${mode === 'interactive' ? 'is-active' : ''}`}
+      >
+        <MessageSquareText className="h-4 w-4" />
+      </TooltipIconButton>
       <TooltipIconButton
         label="书籍管理"
         onClick={() => setBookManagerOpen((open) => !open)}
-        className={`mb-4 hover:bg-[#303238] ${bookManagerOpen ? 'text-[#d7dbe2]' : 'text-[#a8adb7]'}`}
+        className={`nova-icon-button ${bookManagerOpen ? 'is-active' : ''}`}
       >
         <BookOpen className="h-4 w-4" />
       </TooltipIconButton>
-      {mode === 'ide' ? ideActivityButtons : interactiveActivityButtons}
+      {mode === 'ide' ? ideActivityButtons : null}
       <TooltipIconButton
         label="设置"
         onClick={() => setSettingsOpen((open) => !open)}
-        className={`mt-auto hover:bg-[#303238] ${settingsOpen ? 'text-[#d7dbe2]' : 'text-[#a8adb7]'}`}
+        className={`nova-icon-button mt-auto ${settingsOpen ? 'is-active' : ''}`}
       >
         <Settings className="h-4 w-4" />
       </TooltipIconButton>
@@ -557,12 +544,12 @@ function App() {
   )
 
   const sidebar = (
-    <section className="flex h-full flex-col border-r border-[#303238] bg-[#202124]">
-      <div className="flex min-h-[92px] flex-col gap-2 border-b border-[#303238] px-3 py-3">
+    <section className="nova-sidebar flex h-full flex-col border-r">
+      <div className="flex min-h-[92px] flex-col gap-2 border-b border-[var(--nova-border)] px-3 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs font-medium text-[#d7dbe2]">{summary?.title || '作品'}</div>
-            <div className="mt-0.5 text-[11px] text-[#7f8794]">
+            <div className="text-xs font-medium text-[var(--nova-text)]">{summary?.title || '作品'}</div>
+            <div className="mt-0.5 text-[11px] text-[var(--nova-text-faint)]">
               {summary ? `${summary.chapter_count} 章 · ${formatNumber(summary.total_words)} 字` : '正在加载作品进度'}
             </div>
           </div>
@@ -570,7 +557,7 @@ function App() {
             <button
               type="button"
               onClick={refresh}
-              className="rounded p-1 text-[#858b96] hover:bg-[#303238]"
+              className="nova-nav-item rounded p-1"
               title="刷新目录"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -578,7 +565,7 @@ function App() {
             <button
               type="button"
               onClick={() => characterCardInputRef.current?.click()}
-              className="rounded p-1 text-[#858b96] hover:bg-[#303238]"
+              className="nova-nav-item rounded p-1"
               title="导入酒馆角色卡"
               aria-label="导入酒馆角色卡"
               disabled={!workspace}
@@ -595,7 +582,7 @@ function App() {
             <button
               type="button"
               onClick={() => setProjectVisible(false)}
-              className="rounded px-1 text-[#858b96] hover:bg-[#303238] hover:text-[#d7dbe2]"
+              className="nova-nav-item rounded px-1"
             >
               ×
             </button>
@@ -605,14 +592,14 @@ function App() {
           <button
             type="button"
             onClick={() => setSidebarView('outline')}
-            className={`flex-1 rounded-md px-2 py-1 text-xs ${sidebarView === 'outline' ? 'bg-[#2f7dd3] text-white' : 'bg-[#25262a] text-[#9aa0aa] hover:bg-[#303238]'}`}
+            className={`nova-nav-item flex-1 px-2 py-1 text-xs ${sidebarView === 'outline' ? 'is-active' : 'bg-[var(--nova-surface-2)]'}`}
           >
             作品目录
           </button>
           <button
             type="button"
             onClick={() => setSidebarView('files')}
-            className={`flex-1 rounded-md px-2 py-1 text-xs ${sidebarView === 'files' ? 'bg-[#2f7dd3] text-white' : 'bg-[#25262a] text-[#9aa0aa] hover:bg-[#303238]'}`}
+            className={`nova-nav-item flex-1 px-2 py-1 text-xs ${sidebarView === 'files' ? 'is-active' : 'bg-[var(--nova-surface-2)]'}`}
           >
             项目文件
           </button>
@@ -650,9 +637,9 @@ function App() {
   const activeTab = openTabs.find((t) => tabKey(t) === activeTabKey) ?? null
 
   const tabBar = (
-    <div className="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-[#303238] bg-[#202124] text-xs">
+    <div className="nova-sidebar flex h-9 shrink-0 items-stretch overflow-x-auto border-b text-xs">
       {openTabs.length === 0 ? (
-        <div className="flex h-full items-center px-3 text-[#7f8590]">未打开任何页面</div>
+        <div className="flex h-full items-center px-3 text-[var(--nova-text-faint)]">未打开任何页面</div>
       ) : (
         openTabs.map((tab) => {
           const key = tabKey(tab)
@@ -661,10 +648,10 @@ function App() {
           return (
             <div
               key={key}
-              className={`group flex h-full shrink-0 items-center gap-2 border-r border-[#303238] px-3 ${
+              className={`group flex h-full shrink-0 items-center gap-2 border-r border-[var(--nova-border)] px-3 transition-colors ${
                 isActive
-                  ? 'border-t-2 border-t-[#2f7dd3] bg-[#25262a] text-[#d7dbe2]'
-                  : 'text-[#9aa0aa] hover:bg-[#25262a]/60'
+                  ? 'border-t-2 border-t-[var(--nova-text-faint)] bg-[var(--nova-active)] text-[var(--nova-text)]'
+                  : 'text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)]'
               }`}
             >
               <button
@@ -678,7 +665,7 @@ function App() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleCloseTab(tab) }}
-                className="rounded p-0.5 text-[#7f8590] opacity-0 hover:bg-[#303238] hover:text-[#d7dbe2] group-hover:opacity-100"
+                className="nova-nav-item rounded p-0.5 opacity-0 group-hover:opacity-100"
                 aria-label={`关闭 ${label}`}
                 title="关闭"
               >
@@ -692,12 +679,14 @@ function App() {
   )
 
   const main = (
-    <main className="flex h-full min-w-0 flex-col border-r border-[#303238] bg-[#1b1c1f]">
+    <main className={`flex h-full min-w-0 flex-col bg-[var(--nova-bg)] ${mode === 'ide' ? 'border-r border-[var(--nova-border)]' : ''}`}>
       {mode === 'interactive' ? (
         <InteractiveLayout
           workspace={workspace}
           leftPanelVisible={interactiveLeftVisible}
           rightPanelVisible={interactiveRightVisible}
+          onToggleLeftPanel={() => setInteractiveLeftVisible((value) => !value)}
+          onToggleRightPanel={() => setInteractiveRightVisible((value) => !value)}
         />
       ) : (
         <>
@@ -725,10 +714,10 @@ function App() {
   )
 
   const rightPanelContent = rightPanel === 'ai' ? (
-    <aside className="flex h-full flex-col bg-[#202124]">
-      <div className="flex h-9 items-center gap-3 border-b border-[#303238] px-3">
-        <div className="flex shrink-0 items-center gap-2 text-xs font-medium text-[#c5c9d1]">
-          <Bot className="h-3.5 w-3.5 text-[#7aa2f7]" />
+    <aside className="nova-sidebar flex h-full flex-col">
+      <div className="flex h-10 items-center gap-3 border-b border-[var(--nova-border)] px-3">
+        <div className="flex shrink-0 items-center gap-2 text-xs font-medium text-[var(--nova-text)]">
+          <Bot className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
           创作Agent
         </div>
         <SessionManager
@@ -741,11 +730,11 @@ function App() {
           onDelete={deleteChatSession}
         />
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-[11px] text-[#7f8590]">{isStreaming ? '创作中…' : '等待'}</span>
+          <span className="text-[11px] text-[var(--nova-text-faint)]">{isStreaming ? '创作中…' : '等待'}</span>
           <button
             type="button"
             onClick={() => setRightPanel(null)}
-            className="rounded px-1 text-xs text-[#858b96] hover:bg-[#303238] hover:text-[#d7dbe2]"
+            className="nova-nav-item rounded px-1 text-xs"
           >
             ×
           </button>
@@ -789,7 +778,7 @@ function App() {
   ) : null
 
   const statusBar = (
-    <div className="flex h-6 shrink-0 items-center border-t border-[#303238] bg-[#1f2023] px-3 text-[11px] text-[#858b96]">
+    <div className="nova-topbar flex h-6 shrink-0 items-center border-t px-3 text-[11px]">
       <span>Nova v{APP_VERSION}</span>
       {mode === 'ide' && summary && (
         <span className="ml-4">《{summary.title || '未命名'}》 · {summary.chapter_count} 章 · {formatNumber(summary.total_words)} 字</span>
@@ -827,13 +816,14 @@ function App() {
       />
       <Dialog open={bookManagerOpen} onOpenChange={setBookManagerOpen}>
         <DialogContent
-          className="left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border-[#303238] bg-[#1b1c1f] p-0 text-[#d7dbe2]"
+          className="nova-panel left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)]"
           showCloseButton={false}
           aria-describedby={undefined}
         >
           <DialogTitle className="sr-only">书籍管理</DialogTitle>
           <HomeView
             workspace={workspace}
+            novaDir={novaDir}
             books={books}
             onSwitch={handleWorkspaceSwitch}
             onBooksChange={refreshBooks}
@@ -843,7 +833,7 @@ function App() {
       </Dialog>
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent
-          className="left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border-[#303238] bg-[#1b1c1f] p-0 text-[#d7dbe2]"
+          className="nova-panel left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)]"
           showCloseButton={false}
           aria-describedby={undefined}
         >
@@ -874,7 +864,7 @@ function ChapterOutline({
 }) {
   if (chapters.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-[#343842] bg-[#1b1c1f] px-3 py-4 text-center text-xs text-[#858b96]">
+      <div className="rounded-lg border border-dashed border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-4 text-center text-xs text-[var(--nova-text-faint)]">
         chapters/ 下还没有章节
       </div>
     )
@@ -888,20 +878,20 @@ function ChapterOutline({
           <button
             key={chapter.path}
             type="button"
-            className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+            className={`nova-nav-item w-full border px-3 py-2 text-left ${
               active
-                ? 'border-[#2f7dd3]/60 bg-[#2f7dd3]/20 text-[#e6f1ff]'
-                : 'border-transparent bg-[#1b1c1f] text-[#aeb4bf] hover:border-[#343842] hover:bg-[#25262a]'
+                ? 'is-active border-[var(--nova-border)]'
+                : 'border-transparent bg-[var(--nova-surface)]'
             }`}
             onClick={() => onSelectFile(chapter.path)}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <BookOpen className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-[#9fc7ff]' : 'text-[#7aa2f7]'}`} />
+              <BookOpen className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-[var(--nova-text)]' : 'text-[var(--nova-text-muted)]'}`} />
               <span className="truncate text-xs font-medium">{chapter.display_title}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-[#7f8794]">
+            <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--nova-text-faint)]">
               <span>{formatNumber(chapter.words)} 字</span>
-              <span className="rounded border border-[#3a4658] bg-[#1c2430] px-1.5 text-[#9fc7ff]">{chapter.status}</span>
+              <span className="rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-1.5 text-[var(--nova-text-muted)]">{chapter.status}</span>
             </div>
           </button>
         )
@@ -928,9 +918,9 @@ function AgentQuickActions({
   ]
 
   return (
-    <div className="border-b border-[#303238] bg-[#1b1c1f] p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#c5c9d1]">
-        <Sparkles className="h-3.5 w-3.5 text-[#7aa2f7]" />
+    <div className="border-b border-[var(--nova-border)] bg-[var(--nova-bg)] p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--nova-text-muted)]">
+        <Sparkles className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
         快捷创作
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -940,10 +930,10 @@ function AgentQuickActions({
             <button
               key={action.label}
               type="button"
-              className="flex items-center gap-2 rounded-lg border border-[#303238] bg-[#202124] px-3 py-2 text-left text-xs text-[#c5c9d1] hover:border-[#3a4658] hover:bg-[#252a33] hover:text-[#e6f1ff]"
+              className="nova-nav-item flex items-center gap-2 border border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-2 text-left text-xs"
               onClick={() => onSend(action.prompt)}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0 text-[#8fb5ff]" />
+              <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
               <span className="truncate">{action.label}</span>
             </button>
           )
@@ -955,6 +945,12 @@ function AgentQuickActions({
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('zh-CN').format(value)
+}
+
+function applyFontSettings(uiFont?: string, readingFont?: string) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty('--nova-ui-font-family', fontStackFor(uiFont, 'system-sans'))
+  document.documentElement.style.setProperty('--nova-reading-font-family', fontStackFor(readingFont, 'source-han-serif'))
 }
 
 export default App

@@ -41,6 +41,26 @@ export async function getInteractiveTellers(): Promise<Teller[]> {
   return data.tellers || []
 }
 
+export function createInteractiveTeller(input: Partial<Teller>): Promise<Teller> {
+  return requestJSON('/api/interactive/tellers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateInteractiveTeller(id: string, input: Partial<Teller>): Promise<Teller> {
+  return requestJSON(`/api/interactive/tellers/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteInteractiveTeller(id: string): Promise<void> {
+  return requestJSON(`/api/interactive/tellers/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 export async function getInteractiveBranches(storyId: string): Promise<BranchSummary[]> {
   const data = await requestJSON<{ branches: BranchSummary[] }>(`/api/interactive/stories/${encodeURIComponent(storyId)}/branches`)
   return data.branches || []

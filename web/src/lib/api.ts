@@ -115,6 +115,19 @@ export interface GitCommandResult {
   status?: GitStatus
 }
 
+export interface LoreItem {
+  id: string
+  type: 'character' | 'world' | 'location' | 'faction' | 'rule' | 'item' | 'other'
+  name: string
+  importance: 'major' | 'important' | 'minor'
+  tags: string[]
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export type LoreItemInput = Omit<LoreItem, 'created_at' | 'updated_at'>
+
 async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const data = await res.json()
@@ -301,11 +314,6 @@ export async function switchWorkspace(path: string): Promise<{ workspace: string
   })
 }
 
-/** 打开本机系统文件夹选择器 */
-export async function selectDirectory(): Promise<{ path: string; cancelled: boolean }> {
-  return requestJSON('/api/system/select-directory')
-}
-
 /** 获取最近打开的书籍列表 */
 export async function getBooks(): Promise<BookRecord[]> {
   const data = await requestJSON<{ books: BookRecord[] }>('/api/books')
@@ -347,6 +355,31 @@ export async function saveFile(path: string, content: string): Promise<{ message
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, content }),
   })
+}
+
+export async function getLoreItems(): Promise<LoreItem[]> {
+  const data = await requestJSON<{ items: LoreItem[] }>('/api/lore/items')
+  return data.items || []
+}
+
+export async function createLoreItem(item: Partial<LoreItemInput>): Promise<LoreItem> {
+  return requestJSON('/api/lore/items', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  })
+}
+
+export async function updateLoreItem(id: string, item: Partial<LoreItemInput>): Promise<LoreItem> {
+  return requestJSON(`/api/lore/items/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  })
+}
+
+export async function deleteLoreItem(id: string): Promise<void> {
+  await requestJSON(`/api/lore/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 /** 新建文件或目录 */
@@ -405,11 +438,11 @@ export async function importCharacterCard(file: File): Promise<CharacterCardImpo
 }
 
 /** 新建书籍工作区 */
-export async function createBook(parentDir: string, title: string, author?: string, description?: string): Promise<{ workspace: string; book_meta: BookMeta }> {
+export async function createBook(title: string, author?: string, description?: string): Promise<{ workspace: string; book_meta: BookMeta }> {
   return requestJSON('/api/books/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parent_dir: parentDir, title, author: author ?? '', description: description ?? '' }),
+    body: JSON.stringify({ title, author: author ?? '', description: description ?? '' }),
   })
 }
 

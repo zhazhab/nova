@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -90,21 +91,30 @@ func (s *ChatService) Run(
 	}()
 
 	agentMessage := req.Message
+	contextLog := newContextBuildLog()
+	contextLog.add("用户输入", "本轮原始请求", originalMessage, "")
+	if resumeInterruption != nil {
+		contextLog.add("运行时恢复", "异常中断恢复上下文", req.Message, "包含上一轮原始请求、已生成助手内容和中断原因")
+	}
 	if req.PlanMode {
 		agentMessage = appendPlanModeInstruction(agentMessage)
+		contextLog.add("注入规则", "规划模式", "[规划模式] 请你先制定计划，不要执行任何写操作。", "")
 	}
 	if len(req.References) > 0 {
-		agentMessage = appendReferenceContext(bookService, req.Message, req.References)
+		agentMessage = appendReferenceContext(bookService, agentMessage, req.References, contextLog)
 	}
 	if len(req.StyleReferences) > 0 {
-		agentMessage = appendStyleReferenceContext(bookService, agentMessage, req.StyleReferences)
+		agentMessage = appendStyleReferenceContext(bookService, agentMessage, req.StyleReferences, contextLog)
 	} else if len(req.StyleRules) > 0 {
 		agentMessage = appendStyleRulesHint(agentMessage, req.StyleRules)
+		contextLog.addStyleRules(req.StyleRules)
 	}
 	if len(req.Selections) > 0 {
 		agentMessage = appendSelectionContext(agentMessage, req.Selections)
+		contextLog.addSelections(req.Selections)
 	}
 	agentMessage = appendContextBoundaryInstruction(agentMessage)
+	contextLog.add("注入规则", "上下文边界", "[上下文边界] 当前用户请求是“这次要做什么”", "")
 
 	history, err := conversation.PrepareMessages(originalMessage, agentMessage)
 	if err != nil {
@@ -124,6 +134,7 @@ func (s *ChatService) Run(
 		req.PlanMode,
 		resumeInterruption != nil,
 	)
+	log.Printf("[agent-run] context sources %s", contextLog.String())
 
 	events := runner.Run(ctx, history)
 	var fullContent strings.Builder
@@ -261,7 +272,7 @@ func buildInterruptedResumeMessage(current string, interrupted *session.Interrup
 }
 
 // appendReferenceContext 将用户引用的文件内容追加到本次 Agent 输入。
-func appendReferenceContext(bookService *book.Service, message string, references []string) string {
+func appendReferenceContext(bookService *book.Service, message string, references []string, logs ...*contextBuildLog) string {
 	var sb strings.Builder
 	sb.WriteString(message)
 	sb.WriteString(prompts.ReferenceHeader)
@@ -281,6 +292,7 @@ func appendReferenceContext(bookService *book.Service, message string, reference
 
 		if total >= maxReferenceTotalBytes {
 			sb.WriteString(prompts.ReferenceOverflowHint)
+			addContextLog(logs, "文件引用", "@"+ref, prompts.ReferenceOverflowHint, "未读取：引用内容总量已超过限制")
 			continue
 		}
 
@@ -290,8 +302,10 @@ func appendReferenceContext(bookService *book.Service, message string, reference
 			sb.WriteString("读取失败：")
 			sb.WriteString(err.Error())
 			sb.WriteString("\n")
+			addContextLog(logs, "文件引用", "@"+ref, err.Error(), "读取失败")
 			continue
 		}
+		addContextLog(logs, "文件引用", "@"+ref, content, "")
 
 		sb.WriteString("```markdown\n")
 		sb.WriteString(content)
@@ -302,7 +316,7 @@ func appendReferenceContext(bookService *book.Service, message string, reference
 }
 
 // appendStyleReferenceContext 将本轮指定的风格参考追加到 Agent 输入。
-func appendStyleReferenceContext(bookService *book.Service, message string, styleReferences []string) string {
+func appendStyleReferenceContext(bookService *book.Service, message string, styleReferences []string, logs ...*contextBuildLog) string {
 	var sb strings.Builder
 	sb.WriteString(message)
 	sb.WriteString(prompts.StyleReferenceHeader)
@@ -322,6 +336,7 @@ func appendStyleReferenceContext(bookService *book.Service, message string, styl
 
 		if total >= maxStyleReferenceTotalBytes {
 			sb.WriteString(prompts.StyleReferenceOverflowHint)
+			addContextLog(logs, "风格参考", "#"+ref, prompts.StyleReferenceOverflowHint, "未读取：风格参考内容总量已超过限制")
 			continue
 		}
 
@@ -331,8 +346,10 @@ func appendStyleReferenceContext(bookService *book.Service, message string, styl
 			sb.WriteString("读取失败：")
 			sb.WriteString(err.Error())
 			sb.WriteString("\n")
+			addContextLog(logs, "风格参考", "#"+ref, err.Error(), "读取失败")
 			continue
 		}
+		addContextLog(logs, "风格参考", "#"+ref, content, "")
 
 		sb.WriteString("```markdown\n")
 		sb.WriteString(content)
@@ -636,6 +653,106 @@ func appendContextBoundaryInstruction(message string) string {
 	return prompts.ContextBoundary(message)
 }
 
+type contextBuildLog struct {
+	parts []contextLogPart
+}
+
+type contextLogPart struct {
+	Source  string
+	Title   string
+	Content string
+	Note    string
+}
+
+func newContextBuildLog() *contextBuildLog {
+	return &contextBuildLog{parts: []contextLogPart{}}
+}
+
+func (l *contextBuildLog) add(source, title, content, note string) {
+	if l == nil {
+		return
+	}
+	source = strings.TrimSpace(source)
+	title = strings.TrimSpace(title)
+	if source == "" && title == "" && strings.TrimSpace(content) == "" {
+		return
+	}
+	l.parts = append(l.parts, contextLogPart{
+		Source:  source,
+		Title:   title,
+		Content: content,
+		Note:    strings.TrimSpace(note),
+	})
+}
+
+func (l *contextBuildLog) addStyleRules(rules []StyleRule) {
+	for _, rule := range rules {
+		scene := strings.TrimSpace(rule.Scene)
+		if scene == "" || len(rule.Styles) == 0 {
+			continue
+		}
+		styles := trimmedNonEmpty(rule.Styles)
+		if len(styles) == 0 {
+			continue
+		}
+		l.add("注入规则", "场景化默认风格规则："+scene, strings.Join(styles, "、"), "Agent 将按场景自行判断是否 read_file")
+	}
+}
+
+func (l *contextBuildLog) addSelections(selections []TextSelectionRef) {
+	for _, sel := range selections {
+		title := strings.TrimSpace(sel.FileName)
+		if title == "" {
+			title = "未命名选区"
+		}
+		if sel.StartLine > 0 || sel.EndLine > 0 {
+			title = fmt.Sprintf("%s:L%d-L%d", title, sel.StartLine, sel.EndLine)
+		}
+		l.add("编辑器选区", title, sel.Content, "")
+	}
+}
+
+func (l *contextBuildLog) String() string {
+	if l == nil || len(l.parts) == 0 {
+		return "count=0"
+	}
+	parts := make([]string, 0, len(l.parts))
+	for i, part := range l.parts {
+		content := strings.TrimSpace(part.Content)
+		fields := []string{
+			fmt.Sprintf("%d:source=%q", i, part.Source),
+			fmt.Sprintf("title=%q", part.Title),
+			"bytes=" + intString(len(content)),
+			"chars=" + intString(utf8.RuneCountInString(content)),
+			"preview=" + strconv.Quote(safeLogPreview(content, 100)),
+		}
+		if part.Note != "" {
+			fields = append(fields, "note="+strconv.Quote(part.Note))
+		}
+		parts = append(parts, strings.Join(fields, ","))
+	}
+	return fmt.Sprintf("count=%d parts=[%s]", len(l.parts), strings.Join(parts, "; "))
+}
+
+func addContextLog(logs []*contextBuildLog, source, title, content, note string) {
+	for _, l := range logs {
+		if l != nil {
+			l.add(source, title, content, note)
+		}
+	}
+}
+
+func trimmedNonEmpty(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
 func messageListSummary(messages []*schema.Message) string {
 	if len(messages) == 0 {
 		return "count=0"
@@ -654,29 +771,23 @@ func messageListSummary(messages []*schema.Message) string {
 		totalChars += utf8.RuneCountInString(msg.Content)
 	}
 
-	parts := make([]string, 0, minInt(len(messages), 8)+1)
-	if len(messages) <= 8 {
-		for i, msg := range messages {
-			parts = append(parts, messageSummary(i, msg))
-		}
-	} else {
-		for i := 0; i < 4; i++ {
-			parts = append(parts, messageSummary(i, messages[i]))
-		}
-		parts = append(parts, fmt.Sprintf("... omitted=%d ...", len(messages)-8))
-		for i := len(messages) - 4; i < len(messages); i++ {
-			parts = append(parts, messageSummary(i, messages[i]))
-		}
+	parts := make([]string, 0, len(messages))
+	for i, msg := range messages {
+		parts = append(parts, messageSummary(i, len(messages), msg))
 	}
 
 	return fmt.Sprintf("count=%d roles=%s total_bytes=%d total_chars=%d parts=[%s]", len(messages), roleCountSummary(roleCounts), totalBytes, totalChars, strings.Join(parts, "; "))
 }
 
-func messageSummary(index int, msg *schema.Message) string {
+func messageSummary(index, total int, msg *schema.Message) string {
 	if msg == nil {
 		return fmt.Sprintf("%d:<nil>", index)
 	}
-	return fmt.Sprintf("%d:%s(%s)", index, msg.Role, promptPartSummary(msg.Content))
+	source := "会话历史"
+	if index == total-1 {
+		source = "本轮增强后用户输入"
+	}
+	return fmt.Sprintf("%d:source=%s role=%s(%s)", index, source, msg.Role, promptPartSummary(msg.Content))
 }
 
 func roleCountSummary(counts map[string]int) string {

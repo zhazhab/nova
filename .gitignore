@@ -1,4 +1,5 @@
-.trae/
+.codex/
+.agents/
 playground
 output/
 log/

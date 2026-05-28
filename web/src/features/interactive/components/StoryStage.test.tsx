@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StoryStage } from './StoryStage'
 import { abortInteractiveChat, sendInteractiveMessage } from '../api'
+import { useInteractiveStore } from '../stores/interactive-store'
 import type { InteractiveSSEEvent } from '../types'
 
 vi.mock('../api', () => ({
@@ -21,6 +22,7 @@ function streamEvents(events: InteractiveSSEEvent[]): ReadableStream<Interactive
 describe('StoryStage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useInteractiveStore.setState({ storyStageRuns: {} })
   })
 
   it('uses chat messages for interactive history and streamed agent events', async () => {
@@ -282,5 +284,45 @@ describe('StoryStage', () => {
     fireEvent.click(screen.getByRole('button', { name: '中断 AI 执行' }))
 
     await waitFor(() => expect(abortInteractiveChat).toHaveBeenCalledTimes(1))
+  })
+
+  it('keeps streamed output visible after the story stage remounts', async () => {
+    let controller: ReadableStreamDefaultController<InteractiveSSEEvent>
+    vi.mocked(sendInteractiveMessage).mockResolvedValue(new ReadableStream<InteractiveSSEEvent>({
+      start(streamController) {
+        controller = streamController
+      },
+    }))
+    const onDone = vi.fn()
+    const props = {
+      workspace: '/books/demo',
+      storyId: 'st_1',
+      branchId: 'main',
+      snapshot: { story_id: 'st_1', branch_id: 'main', state: {}, turns: [] },
+      onDone,
+    }
+
+    const view = render(<StoryStage {...props} />)
+    fireEvent.change(screen.getByPlaceholderText('你要做什么？'), { target: { value: '继续' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    await screen.findByText('继续')
+
+    controller!.enqueue({ event: 'chunk', data: JSON.stringify({ content: '<NARRATIVE>雨声' }) })
+    await screen.findByText('雨声')
+    view.unmount()
+
+    controller!.enqueue({ event: 'chunk', data: JSON.stringify({ content: '逼近。</NARRATIVE>' }) })
+    await waitFor(() => {
+      const run = useInteractiveStore.getState().storyStageRuns['/books/demo:st_1:main']
+      expect(run?.liveMessages.some((message) => message.content?.includes('雨声逼近。'))).toBe(true)
+    })
+
+    render(<StoryStage {...props} />)
+    expect(await screen.findByText('雨声逼近。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '中断 AI 执行' })).toBeInTheDocument()
+
+    controller!.enqueue({ event: 'done', data: '{}' })
+    controller!.close()
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
   })
 })

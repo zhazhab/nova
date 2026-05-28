@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import type { WheelEvent } from 'react'
+import type { CSSProperties, WheelEvent } from 'react'
 import { MessageItem, ToolActivityBlock } from './MessageItem'
 import type { ChatMessage } from '@/lib/api'
 
@@ -10,10 +10,11 @@ interface MessageListProps {
   highlightDialogue?: boolean
   scrollResetKey?: string
   bottomPaddingClassName?: string
+  messageStyle?: CSSProperties
 }
 
 /** 消息列表组件，支持流式内容实时展示和自动滚动 */
-export function MessageList({ messages, isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '' }: MessageListProps) {
+export function MessageList({ messages, isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', messageStyle }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const shouldAutoScrollRef = useRef(true)
@@ -153,7 +154,7 @@ export function MessageList({ messages, isStreaming, activityContent, highlightD
       {messages.map((msg, i) => (
         msg.type === 'clear'
           ? <ContextClearDivider key={msg.id || msg.created_at || i} createdAt={msg.created_at} />
-          : <MessageItem key={msg.id || i} message={msg} highlightDialogue={highlightDialogue} />
+          : <MessageItem key={msg.id || i} message={msg} highlightDialogue={highlightDialogue} messageStyle={messageStyle} />
       ))}
 
       {isStreaming && (

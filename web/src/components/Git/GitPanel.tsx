@@ -228,7 +228,7 @@ export function GitPanel({ workspace, refreshSignal, visible, onClose }: GitPane
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="flex items-center justify-center gap-1 border-[#3a3d44] bg-transparent text-[#aeb4bf] hover:border-[#7aa2f7] hover:bg-[#25262a] hover:text-[#d7dbe2] disabled:opacity-40"
+                  className="flex items-center justify-center gap-1 border-[#3a3d44] bg-transparent text-[#aeb4bf] hover:border-[#a8adb7] hover:bg-[#25262a] hover:text-[#d7dbe2] disabled:opacity-40"
                   onClick={() => stashMutation.mutate()}
                   disabled={loading || clean}
                   title={clean ? '当前没有可暂存的未提交变更' : '暂存当前未提交内容'}
@@ -240,7 +240,7 @@ export function GitPanel({ workspace, refreshSignal, visible, onClose }: GitPane
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="flex items-center justify-center gap-1 border-[#3a3d44] bg-transparent text-[#aeb4bf] hover:border-[#7aa2f7] hover:bg-[#25262a] hover:text-[#d7dbe2] disabled:opacity-40"
+                  className="flex items-center justify-center gap-1 border-[#3a3d44] bg-transparent text-[#aeb4bf] hover:border-[#a8adb7] hover:bg-[#25262a] hover:text-[#d7dbe2] disabled:opacity-40"
                   onClick={() => popMutation.mutate()}
                   disabled={loading}
                   title="恢复最近一次暂存内容"
@@ -319,9 +319,9 @@ function RepositoryHeader({ workspace, status, changesCount }: { workspace: stri
   return (
     <div className="rounded border border-[#303238] bg-[#1b1c1f] p-2">
       <div className="flex items-center gap-2">
-        <GitBranch className="h-3.5 w-3.5 text-[#7aa2f7]" />
+        <GitBranch className="h-3.5 w-3.5 text-[#a8adb7]" />
         <span className="min-w-0 flex-1 truncate font-medium text-[#d7dbe2]">{workspaceName(workspace) || '未选择书籍'}</span>
-        {initialized && <span className="rounded-full bg-[#0e639c] px-2 py-0.5 text-[11px] text-white">{branch}</span>}
+        {initialized && <span className="rounded-full bg-[#4a4d54] px-2 py-0.5 text-[11px] text-white">{branch}</span>}
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-[#858b96]">
         <span className={initialized ? clean ? 'text-[#6cc477]' : 'text-[#ffbd5e]' : 'text-[#858b96]'}>
@@ -355,7 +355,7 @@ function ChangesList({ changes }: { changes: GitChange[] }) {
     <div className="space-y-0.5">
       {changes.map(change => (
         <div key={`${change.status}:${change.path}`} className="group flex items-center gap-2 rounded px-1.5 py-1 hover:bg-[#2a2d33]" title={change.path}>
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-[#3a5f8f] bg-[#1f2d3f] text-[9px] text-[#8fb5ff]">M</span>
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-[#4a4d54] bg-[#25262a] text-[9px] text-[#aeb4bf]">M</span>
           <span className="min-w-0 flex-1 truncate text-[#c5c9d1]">{fileName(change.path)}</span>
           <span className="truncate text-[10px] text-[#666d78]">{dirName(change.path)}</span>
           <span className={`shrink-0 text-[11px] ${statusColor(change.status)}`}>{change.status.trim() || 'M'}</span>
@@ -409,6 +409,6 @@ function shortHash(hash: string) {
 function statusColor(status: string) {
   if (status.includes('D')) return 'text-[#ff6b6b]'
   if (status.includes('U') || status.includes('?')) return 'text-[#6cc477]'
-  if (status.includes('A')) return 'text-[#7aa2f7]'
+  if (status.includes('A')) return 'text-[#a8adb7]'
   return 'text-[#ffbd5e]'
 }
