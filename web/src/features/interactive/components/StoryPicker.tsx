@@ -73,7 +73,7 @@ export function StoryPicker({ stories, currentStoryId, tellers, onSelect, onCrea
   )
 
   const deleteButton = currentStoryId && (
-    <Button variant="ghost" size="icon-xs" className="text-[var(--nova-text-faint)] hover:bg-[#4a2b2b] hover:text-[#ff8a8a]" onClick={() => onDelete(currentStoryId)} aria-label="删除故事线">
+    <Button variant="ghost" size="icon-xs" className="text-[var(--nova-text-faint)] hover:bg-red-500/15 hover:text-red-200" onClick={() => onDelete(currentStoryId)} aria-label="删除故事线">
       <Trash2 className="h-3 w-3" />
     </Button>
   )

@@ -266,6 +266,59 @@ func (a *App) DeleteLoreItem(id string) error {
 	return book.NewLoreStore(state.Workspace()).Delete(id)
 }
 
+func (a *App) LoreVersions() ([]book.LoreVersion, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return nil, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).Versions()
+}
+
+func (a *App) CreateLoreVersion(message string) (book.LoreVersion, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return book.LoreVersion{}, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).Snapshot(message)
+}
+
+func (a *App) RestoreLoreVersion(id string) ([]book.LoreItem, error) {
+	a.mu.RLock()
+	state := a.bookState
+	a.mu.RUnlock()
+	if state == nil {
+		return nil, ErrNoWorkspace
+	}
+	return book.NewLoreStore(state.Workspace()).RestoreVersion(id)
+}
+
+func (a *App) RunLoreAgent(ctx context.Context, instruction string) (book.LoreApplyResult, error) {
+	a.mu.RLock()
+	state := a.bookState
+	cfg := a.cfg
+	workspace := a.workspace
+	a.mu.RUnlock()
+	if state == nil || cfg == nil {
+		return book.LoreApplyResult{}, ErrNoWorkspace
+	}
+	runtimeCfg := *cfg
+	runtimeCfg.Workspace = workspace
+	store := book.NewLoreStore(state.Workspace())
+	items, err := store.List()
+	if err != nil {
+		return book.LoreApplyResult{}, err
+	}
+	plan, err := agent.GenerateLoreEditPlan(ctx, &runtimeCfg, instruction, items)
+	if err != nil {
+		return book.LoreApplyResult{}, err
+	}
+	return store.ApplyOperations(plan.Message, plan.Ops)
+}
+
 // StartInteractiveTask 启动互动模式 Agent 任务，输出写回 interactive/story。
 func (a *App) StartInteractiveTask(storyID, branchID, message string) *Task {
 	a.mu.Lock()

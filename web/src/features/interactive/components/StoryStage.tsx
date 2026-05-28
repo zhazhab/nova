@@ -201,36 +201,36 @@ export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: S
   }
 
   return (
-    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#1b1c1f]">
-      <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#1b1c1f]">
-        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[#303238] bg-[#1f2023]/95 px-4 shadow-[inset_0_-1px_0_rgba(255,255,255,0.02)] backdrop-blur">
+    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]">
+      <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]">
+        <div className="nova-topbar flex min-h-10 items-center justify-between gap-3 border-b px-4">
           <div className="min-w-0">
-            <div className="text-[10px] font-medium leading-4 text-[#8893a4]">故事舞台 · 当前分支 {branchId || 'main'}</div>
-            <div className="truncate text-xs font-semibold leading-5 text-[#eef3fb]">{title}</div>
+            <div className="text-[10px] font-medium leading-4 text-[var(--nova-text-faint)]">故事舞台 · 当前分支 {branchId || 'main'}</div>
+            <div className="truncate text-xs font-semibold leading-5 text-[var(--nova-text)]">{title}</div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 items-center gap-1.5 rounded-md border border-[#303238] bg-[#25262a] px-2 text-[11px] text-[#c5c9d1] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <MessageSquareText className="h-3.5 w-3.5 text-[#a8adb7]" />
+            <div className="flex h-7 items-center gap-1.5 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] px-2 text-[11px] text-[var(--nova-text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <MessageSquareText className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
               互动创作
             </div>
-            <Badge variant="outline" className="h-7 gap-1.5 border-[#303238] bg-[#25262a] px-2 text-[11px] text-[#9aa0aa]">
+            <Badge variant="outline" className="h-7 gap-1.5 border-[var(--nova-border)] bg-[var(--nova-surface)] px-2 text-[11px] text-[var(--nova-text-muted)]">
               <GitBranch className="h-3 w-3" />
               {snapshot?.turns?.length || 0} 回合
             </Badge>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 overflow-hidden bg-[#1b1c1f]">
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#1b1c1f]">
-            <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#303238] bg-[#202124] px-4 text-[11px] text-[#8b95a6]">
+        <div className="flex min-h-0 flex-1 overflow-hidden bg-[var(--nova-surface-2)]">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--nova-surface-2)]">
+            <div className="flex h-8 shrink-0 items-center justify-between border-b border-[var(--nova-border)] bg-[var(--nova-surface)] px-4 text-[11px] text-[var(--nova-text-faint)]">
               <span className="flex items-center gap-1.5">
-                <MessageSquareText className="h-3.5 w-3.5 text-[#a8adb7]" />
+                <MessageSquareText className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
                 指令流
               </span>
               <span>{messages.length} 条记录</span>
             </div>
             {messages.length === 0 && !streaming ? (
-              <div className="m-5 flex min-h-0 flex-1 items-center justify-center rounded-md border border-dashed border-[#3a3d44] bg-[#202124]/80 text-sm text-[#858b96] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="m-5 flex min-h-0 flex-1 items-center justify-center rounded-[var(--nova-radius)] border border-dashed border-[var(--nova-border)] bg-[var(--nova-surface)] text-sm text-[var(--nova-text-faint)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                 输入第一句话，开始互动故事。
               </div>
             ) : (
@@ -247,11 +247,11 @@ export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: S
           </section>
         </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[#1b1c1f] via-[#1b1c1f]/92 to-transparent pt-8">
-        <div className="pointer-events-auto rounded-md border border-[#303238] bg-[#202124]/96 p-3 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur">
+      <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[var(--nova-surface-2)] via-[var(--nova-surface-2)] to-transparent pt-8">
+        <div className="pointer-events-auto rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-3 shadow-[var(--nova-shadow)] backdrop-blur">
           <div className="flex items-center gap-3">
             <Textarea
-              className="h-14 min-h-14 flex-1 resize-none border-[#3a3d44] bg-[#1b1c1f] text-sm leading-6 text-[#d7dbe2] placeholder:text-[#777d87] focus-visible:border-[#5a5d64] focus-visible:ring-1 focus-visible:ring-[#5a5d64]/35"
+              className="nova-field h-14 min-h-14 flex-1 resize-none text-sm leading-6 placeholder:text-[var(--nova-text-faint)] focus-visible:ring-1 focus-visible:ring-[var(--nova-border)]/35"
               style={stageTextStyle}
               value={input}
               placeholder="你要做什么？"
@@ -264,7 +264,7 @@ export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: S
               }}
             />
             <Button
-              className={`h-14 w-24 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${streaming ? 'bg-[#c95050] hover:bg-[#e05d5d]' : 'bg-[#3a3d44] hover:bg-[#4a4d54]'}`}
+              className={`h-14 w-24 border border-[var(--nova-border)] text-[var(--nova-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${streaming ? 'bg-red-500/45 hover:bg-red-500/55' : 'bg-[var(--nova-active)] hover:bg-[var(--nova-hover)]'}`}
               disabled={streaming ? false : (!storyId || !input.trim())}
               onClick={() => { streaming ? stop() : void send() }}
               aria-label={streaming ? '中断 AI 执行' : '发送'}

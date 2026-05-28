@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BookOpen, Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { BookOpen, Check, Clock3, Folder, LibraryBig, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -46,7 +46,10 @@ function relativeTime(isoStr: string): string {
   return `${months}月前`
 }
 
-const inputCls = 'w-full rounded border border-[#3a3d44] bg-[#25262a] px-2 py-1 text-xs text-[#d7dbe2] outline-none focus:border-[#4a4d54]'
+const inputCls = 'nova-field w-full rounded-[var(--nova-radius)] border px-2.5 py-1.5 outline-none placeholder:text-[var(--nova-text-faint)] focus:border-[#3a3a3a] focus:bg-[var(--nova-surface-3)]'
+const ghostButtonCls = 'nova-nav-item border border-transparent bg-transparent text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
+const primaryButtonCls = 'border border-[var(--nova-border)] bg-[var(--nova-active)] text-[var(--nova-text)] hover:bg-[var(--nova-hover)]'
+const iconButtonCls = 'nova-nav-item text-[var(--nova-text-faint)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
 
 /** 书籍管理视图：集中展示、创建、打开和编辑最近书籍。 */
 export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, onClose }: HomeViewProps) {
@@ -149,16 +152,19 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
     }
   }
 
+  const currentBook = books.find((book) => book.path === workspace)
+
   return (
-    <div className="flex h-full min-w-0 flex-col bg-[#1b1c1f] text-[#d7dbe2]">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[#303238] bg-[#202124] px-4 text-xs">
-        <BookOpen className="h-3.5 w-3.5 text-[#a8adb7]" />
-        <span className="font-medium text-[#d7dbe2]">书籍管理</span>
+    <div className="nova-sidebar flex h-full min-w-0 flex-col text-[var(--nova-text)]">
+      <div className="nova-topbar flex h-10 shrink-0 items-center gap-2 border-b px-4 text-xs">
+        <LibraryBig className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
+        <span className="font-medium text-[var(--nova-text)]">书籍管理</span>
+        <span className="text-[11px] text-[var(--nova-text-faint)]">{books.length} 本最近书籍</span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto rounded p-1 text-[#858b96] hover:bg-[#303238] hover:text-[#d7dbe2]"
+            className={`${iconButtonCls} ml-auto rounded p-1`}
             aria-label="关闭书籍管理"
             title="关闭书籍管理"
           >
@@ -168,23 +174,42 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-6">
+        <div className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-6">
           {/* 当前书籍 */}
-          <section className="rounded border border-[#303238] bg-[#202124] p-4">
-            <div className="mb-2 text-xs font-medium text-[#c5c9d1]">当前书籍</div>
-            <div className="text-sm text-[#d7dbe2]">{workspace || '未设置工作区'}</div>
+          <section className="border-b border-[var(--nova-border)] pb-5">
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase text-[var(--nova-text-faint)]">
+              <BookOpen className="h-3.5 w-3.5" />
+              当前书籍
+            </div>
+            <div className="flex min-w-0 flex-col gap-2 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-[var(--nova-text)]">
+                  {currentBook?.name || (workspace ? workspace.split('/').filter(Boolean).pop() : '未设置工作区')}
+                </div>
+                <div className="mt-1 truncate text-[11px] text-[var(--nova-text-faint)]">{workspace || '请新建或选择一本书开始写作'}</div>
+              </div>
+              {currentBook?.last_opened_at && (
+                <div className="flex shrink-0 items-center gap-1.5 rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2 py-1 text-[11px] text-[var(--nova-text-muted)]">
+                  <Clock3 className="h-3 w-3" />
+                  {relativeTime(currentBook.last_opened_at)}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* 书籍列表 */}
-          <section className="rounded border border-[#303238] bg-[#202124] p-4">
+          <section>
             <div className="mb-3 flex items-center justify-between">
-              <div className="text-xs font-medium text-[#c5c9d1]">最近书籍</div>
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase text-[var(--nova-text-faint)]">
+                <Folder className="h-3.5 w-3.5" />
+                最近书籍
+              </div>
               {!showCreateForm && (
                 <Button
                   type="button"
                   size="xs"
                   variant="ghost"
-                  className="flex items-center gap-1 text-[#aeb4bf] hover:bg-[#303238]"
+                  className={ghostButtonCls}
                   onClick={openCreateForm}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -194,8 +219,11 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
             </div>
 
             {showCreateForm && (
-              <div className="mb-4 space-y-2 rounded bg-[#25262a] p-3">
-                <div className="text-xs font-medium text-[#c5c9d1]">新建书籍</div>
+              <div className="mb-4 space-y-3 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                <div className="flex items-center gap-2 text-xs font-medium text-[var(--nova-text)]">
+                  <Plus className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
+                  新建书籍
+                </div>
                 <Input
                   type="text"
                   value={createTitle}
@@ -211,8 +239,10 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
                   placeholder="作者（选填）"
                   className={inputCls}
                 />
-                <div className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1.5 text-xs text-[#8f98a8]">
-                  新书将创建在：<span className="text-[#c5c9d1]">{novaDir || 'Nova 数据目录加载中...'}</span>
+                <div className="flex min-w-0 items-center gap-2 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2.5 py-1.5 text-xs text-[var(--nova-text-faint)]">
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
+                  <span className="shrink-0">新书将创建在</span>
+                  <span className="truncate text-[var(--nova-text-muted)]">{novaDir || 'Nova 数据目录加载中...'}</span>
                 </div>
                 <Textarea
                   value={createDesc}
@@ -223,8 +253,8 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
                 />
                 {createError && <div className="text-xs text-red-400">{createError}</div>}
                 <div className="flex items-center justify-end gap-2">
-                  <Button type="button" size="xs" variant="ghost" className="text-[#858b96] hover:bg-[#303238]" onClick={() => setShowCreateForm(false)}>取消</Button>
-                  <Button type="button" size="xs" className="bg-[#4a4d54] text-white hover:bg-[#5a5d64]" disabled={creating || !novaDir.trim()} onClick={handleCreate}>
+                  <Button type="button" size="xs" variant="ghost" className={ghostButtonCls} onClick={() => setShowCreateForm(false)}>取消</Button>
+                  <Button type="button" size="xs" className={primaryButtonCls} disabled={creating || !novaDir.trim()} onClick={handleCreate}>
                     {creating ? '创建中...' : '创建'}
                   </Button>
                 </div>
@@ -232,18 +262,18 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
             )}
 
             {books.length === 0 ? (
-              <div className="py-6 text-center text-xs text-[#858b96]">暂无书籍记录</div>
+              <div className="rounded-[var(--nova-radius)] border border-dashed border-[var(--nova-border)] bg-[var(--nova-surface)] px-4 py-8 text-center text-xs text-[var(--nova-text-faint)]">暂无书籍记录</div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {books.map((book) => {
                   const isCurrent = book.path === workspace
                   const isEditing = editingBookPath === book.path
 
                   if (isEditing) {
                     return (
-                      <div key={book.path} className="space-y-1.5 rounded bg-[#25262a] p-3">
+                      <div key={book.path} className="space-y-2 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
                         {editLoading ? (
-                          <div className="py-2 text-center text-xs text-[#858b96]">加载中...</div>
+                          <div className="py-2 text-center text-xs text-[var(--nova-text-faint)]">加载中...</div>
                         ) : (
                           <>
                             <Input
@@ -271,14 +301,14 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
                             <div className="flex items-center justify-end gap-2">
                               <TooltipIconButton
                                 label="取消"
-                                className="text-[#858b96] hover:bg-[#303238]"
+                                className={iconButtonCls}
                                 onClick={() => setEditingBookPath(null)}
                               >
                                 <X className="h-3.5 w-3.5" />
                               </TooltipIconButton>
                               <TooltipIconButton
                                 label="保存"
-                                className="text-[#4a4d54] hover:bg-[#4a4d54]/15"
+                                className="nova-nav-item text-[var(--nova-accent-green)] hover:bg-[var(--nova-hover)]"
                                 disabled={editSaving}
                                 onClick={handleSaveEdit}
                               >
@@ -294,37 +324,39 @@ export function HomeView({ workspace, novaDir, books, onSwitch, onBooksChange, o
                   return (
                     <div
                       key={book.path}
-                      className={`group relative flex items-start gap-2 rounded px-3 py-2 text-xs hover:bg-[#4a4d54]/15 ${
-                        isCurrent ? 'text-[#f0f2f5]' : 'text-[#c5c9d1]'
+                      className={`group relative flex items-start gap-3 rounded-[var(--nova-radius)] border px-3 py-3 text-xs transition-colors ${
+                        isCurrent
+                          ? 'border-[var(--nova-border)] bg-[var(--nova-active)] text-[var(--nova-text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                          : 'border-transparent bg-[var(--nova-surface)] text-[var(--nova-text-muted)] hover:border-[var(--nova-border)] hover:bg-[var(--nova-hover)]'
                       }`}
                     >
                       {isCurrent && (
-                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[#4a4d54]" />
+                        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[var(--nova-accent)]" />
                       )}
                       <button
                         type="button"
                         className="min-w-0 flex-1 pl-1 text-left"
                         onClick={() => handleSwitch(book.path)}
                       >
-                        <div className="truncate text-sm font-semibold">{book.name || '未命名书籍'}</div>
-                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[#858b96]">
+                        <div className="truncate text-sm font-semibold text-[var(--nova-text)]">{book.name || '未命名书籍'}</div>
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[var(--nova-text-faint)]">
                           {book.author && <span>{book.author}</span>}
                           {book.last_opened_at && <span>{relativeTime(book.last_opened_at)}</span>}
-                          {isCurrent && <span className="rounded bg-[#4a4d54]/20 px-1 text-[#c5c9d1]">当前</span>}
+                          {isCurrent && <span className="rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-1.5 text-[var(--nova-text-muted)]">当前</span>}
                         </div>
-                        <div className="mt-0.5 truncate text-[11px] text-[#5a5f6b]">{book.path}</div>
+                        <div className="mt-1 truncate text-[11px] text-[var(--nova-text-faint)]">{book.path}</div>
                       </button>
                       <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
                         <TooltipIconButton
                           label="编辑信息"
-                          className="text-[#858b96] opacity-0 hover:bg-[#4a4d54]/15 hover:text-[#c5c9d1] group-hover:opacity-100"
+                          className={`${iconButtonCls} opacity-0 group-hover:opacity-100`}
                           onClick={() => startEdit(book)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </TooltipIconButton>
                         <TooltipIconButton
                           label="移除记录"
-                          className="text-[#858b96] opacity-0 hover:bg-red-500/15 hover:text-red-200 group-hover:opacity-100"
+                          className="nova-nav-item text-[var(--nova-text-faint)] opacity-0 hover:bg-red-500/15 hover:text-red-200 group-hover:opacity-100"
                           onClick={() => handleRemove(book.path)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

@@ -31,26 +31,26 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
   const stateStatus = snapshot?.current_turn?.state_status
 
   return (
-    <aside className="flex h-full min-w-0 flex-col border-l border-[#303238] bg-[#202124] p-4">
+    <aside className="nova-sidebar flex h-full min-w-0 flex-col border-l p-4">
       <div className="mb-3 flex h-8 items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-[#e0e4ec]">场景记忆</h2>
-          <div className="text-[11px] text-[#7f8898]">当前回合的实时上下文</div>
+          <h2 className="text-sm font-semibold text-[var(--nova-text)]">场景记忆</h2>
+          <div className="text-[11px] text-[var(--nova-text-faint)]">当前回合的实时上下文</div>
         </div>
         <div className="flex items-center gap-1.5">
-          {stateStatus === 'pending' ? <Badge variant="outline" className="border-[#6b5b2f] bg-[#2c2618] text-[#d9bb69]">同步中</Badge> : null}
-          {stateStatus === 'failed' ? <Badge variant="outline" className="border-[#6a3535] bg-[#2c1b1b] text-[#df8d8d]">同步失败</Badge> : null}
-          <Badge variant="outline" className="border-[#303238] bg-[#25262a] text-[#8d96a7]">{formatBranchName(snapshot?.branch_id)}</Badge>
+          {stateStatus === 'pending' ? <Badge variant="outline" className="border-[var(--nova-accent)]/40 bg-[var(--nova-accent)]/10 text-[var(--nova-accent)]">同步中</Badge> : null}
+          {stateStatus === 'failed' ? <Badge variant="outline" className="border-red-500/35 bg-red-500/10 text-red-300">同步失败</Badge> : null}
+          <Badge variant="outline" className="border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)]">{formatBranchName(snapshot?.branch_id)}</Badge>
         </div>
       </div>
       {stateStatus === 'failed' && snapshot?.current_turn?.state_error ? (
-        <div className="mb-3 rounded-md border border-[#5b3434] bg-[#2a1919] px-3 py-2 text-xs text-[#e0a0a0]">
+        <div className="mb-3 rounded-[var(--nova-radius)] border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-300">
           {snapshot.current_turn.state_error}
         </div>
       ) : null}
       <ScrollArea className="min-h-0 flex-1 pr-1">
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <MapPin className="h-3.5 w-3.5" />
             当前场景
           </div>
@@ -60,67 +60,67 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
             <SnapshotMetric label="视角" value={pov || '未记录'} />
           </div>
           {sceneEntries.length ? (
-            <div className="mt-3 border-t border-[#303238] pt-3">
+            <div className="mt-3 border-t border-[var(--nova-border)] pt-3">
               <StateValue value={Object.fromEntries(sceneEntries)} />
             </div>
           ) : null}
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-2 text-xs font-semibold text-[#d6dbe5]">场景笔记</div>
-          <div className="rounded-md border border-[#303238] bg-[#202124] px-3 py-2 text-xs leading-5 text-[#7f8898]">
+        <section className={panelSectionClass}>
+          <div className="mb-2 text-xs font-semibold text-[var(--nova-text-muted)]">场景笔记</div>
+          <div className={`${panelCardClass} px-3 py-2 text-xs leading-5 text-[var(--nova-text-faint)]`}>
             记录场景的设计意图或待完成事项...
           </div>
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <UserRoundCheck className="h-3.5 w-3.5" />
             在场角色
           </div>
-          <div className="flex flex-wrap gap-1.5 text-sm text-[#a8adb7]">
-            {onStage.length ? onStage.map((name) => <Badge key={String(name)} className="border border-[#3a3d44] bg-[#25262a] text-[#d7dbe2]" variant="secondary">{String(name)}</Badge>) : '暂无在场角色'}
+          <div className="flex flex-wrap gap-1.5 text-sm text-[var(--nova-text-muted)]">
+            {onStage.length ? onStage.map((name) => <Badge key={String(name)} className="border border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text)]" variant="secondary">{String(name)}</Badge>) : '暂无在场角色'}
           </div>
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <Compass className="h-3.5 w-3.5" />
             可行动空间
           </div>
           <CompactList items={actionSpace} empty="暂无可行动入口" />
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <Activity className="h-3.5 w-3.5" />
             角色状态
           </div>
-          <div className="space-y-2 text-xs text-[#a8adb7]">
+          <div className="space-y-2 text-xs text-[var(--nova-text-muted)]">
             {characters.length ? characters.map(([name, state]) => (
-              <div key={name} className="rounded-md border border-[#303238] bg-[#202124] p-2">
-                <div className="mb-1 font-medium text-[#d6dbe5]">{name}</div>
+              <div key={name} className={`${panelCardClass} p-2`}>
+                <div className="mb-1 font-medium text-[var(--nova-text)]">{name}</div>
                 <StateValue value={state} />
               </div>
             )) : '暂无角色状态'}
           </div>
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <Package className="h-3.5 w-3.5" />
             物品与资源
           </div>
-          <div className="space-y-2 text-xs text-[#a8adb7]">
+          <div className="space-y-2 text-xs text-[var(--nova-text-muted)]">
             {inventory ? (
-              <div className="rounded-md border border-[#303238] bg-[#202124] p-2">
-                <div className="mb-1 font-medium text-[#d6dbe5]">物品</div>
+              <div className={`${panelCardClass} p-2`}>
+                <div className="mb-1 font-medium text-[var(--nova-text)]">物品</div>
                 <StateValue value={inventory} />
               </div>
             ) : null}
             {resources ? (
-              <div className="rounded-md border border-[#303238] bg-[#202124] p-2">
-                <div className="mb-1 font-medium text-[#d6dbe5]">资源</div>
+              <div className={`${panelCardClass} p-2`}>
+                <div className="mb-1 font-medium text-[var(--nova-text)]">资源</div>
                 <StateValue value={resources} />
               </div>
             ) : null}
@@ -128,31 +128,31 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
           </div>
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <Flag className="h-3.5 w-3.5" />
             规则与暗线
           </div>
-          <div className="space-y-3 text-xs text-[#a8adb7]">
+          <div className="space-y-3 text-xs text-[var(--nova-text-muted)]">
             <LabeledList label="世界规则" items={[...worldFlags, ...rules]} empty="暂无已激活规则" />
             <LabeledList label="未解决线索" items={threads} empty="暂无未解决线索" />
           </div>
         </section>
 
-        <section className="mb-3 rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#c5c9d1]">
+        <section className={panelSectionClass}>
+          <div className={sectionTitleClass}>
             <Sparkles className="h-3.5 w-3.5" />
             关键事件
           </div>
-          <div className="space-y-2 text-xs text-[#a8adb7]">
+          <div className="space-y-2 text-xs text-[var(--nova-text-muted)]">
             {events.length ? events.map((event, index) => (
               <EventItem key={index} event={event} index={index} />
             )) : '暂无关键事件'}
           </div>
         </section>
 
-        <section className="rounded-md border border-[#303238] bg-[#1b1c1f] p-3">
-          <div className="mb-3 text-xs font-semibold text-[#d6dbe5]">快捷操作</div>
+        <section className={`${panelSectionClass} mb-0`}>
+          <div className="mb-3 text-xs font-semibold text-[var(--nova-text-muted)]">快捷操作</div>
           <div className="grid grid-cols-2 gap-2">
             <InspectorAction icon={Plus} label="新建场景" />
             <InspectorAction icon={Copy} label="复制链接" />
@@ -167,7 +167,7 @@ export function SnapshotPanel({ snapshot }: { snapshot: Snapshot | null }) {
 
 function InspectorAction({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <button type="button" className="flex h-9 items-center justify-center gap-1.5 rounded-md border border-[#303238] bg-[#25262a] text-xs text-[#aeb6c4] hover:border-[#4a4d54] hover:bg-[#303238] hover:text-[#e1e8f3]">
+    <button type="button" className="nova-nav-item flex h-9 items-center justify-center gap-1.5 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-xs text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]">
       <Icon className="h-3.5 w-3.5" />
       <span>{label}</span>
     </button>
@@ -176,9 +176,9 @@ function InspectorAction({ icon: Icon, label }: { icon: LucideIcon; label: strin
 
 function SnapshotMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-[#303238] bg-[#202124] px-2 py-2">
-      <div className="text-[10px] text-[#747f91]">{label}</div>
-      <div className="truncate text-xs font-medium text-[#c8d0dd]" title={value}>{value}</div>
+    <div className="min-w-0 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2 py-2">
+      <div className="text-[10px] text-[var(--nova-text-faint)]">{label}</div>
+      <div className="truncate text-xs font-medium text-[var(--nova-text)]" title={value}>{value}</div>
     </div>
   )
 }
@@ -194,25 +194,25 @@ function pickString(source: Record<string, unknown>, keys: string[]) {
 function StateValue({ value }: { value: unknown }) {
   if (isPlainObject(value)) {
     const entries = Object.entries(value)
-    if (!entries.length) return <div className="text-[#747f91]">暂无记录</div>
+    if (!entries.length) return <div className="text-[var(--nova-text-faint)]">暂无记录</div>
     return (
       <dl className="grid gap-1.5">
         {entries.map(([key, item]) => (
           <div key={key} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
-            <dt className="truncate text-[#747f91]" title={formatLabel(key)}>{formatLabel(key)}</dt>
-            <dd className="min-w-0 text-[#aeb6c4]">{renderReadableValue(item)}</dd>
+            <dt className="truncate text-[var(--nova-text-faint)]" title={formatLabel(key)}>{formatLabel(key)}</dt>
+            <dd className="min-w-0 text-[var(--nova-text-muted)]">{renderReadableValue(item)}</dd>
           </div>
         ))}
       </dl>
     )
   }
-  return <div className="whitespace-pre-wrap text-[#aeb6c4]">{formatScalar(value)}</div>
+  return <div className="whitespace-pre-wrap text-[var(--nova-text-muted)]">{formatScalar(value)}</div>
 }
 
 function EventItem({ event, index }: { event: unknown; index: number }) {
   if (!isPlainObject(event)) {
     return (
-      <div className="rounded-md border border-[#303238] bg-[#202124] p-2 text-[#aeb6c4]">
+      <div className={`${panelCardClass} p-2 text-[var(--nova-text-muted)]`}>
         {formatScalar(event)}
       </div>
     )
@@ -223,22 +223,22 @@ function EventItem({ event, index }: { event: unknown; index: number }) {
   const detailEntries = Object.entries(event).filter(([key]) => !EVENT_PRIMARY_KEYS.has(key))
 
   return (
-    <article className="rounded-md border border-[#303238] bg-[#202124] p-2">
+    <article className={`${panelCardClass} p-2`}>
       <div className="mb-1 flex items-start justify-between gap-2">
-        <div className="min-w-0 font-medium text-[#d6dbe5]">{title}</div>
+        <div className="min-w-0 font-medium text-[var(--nova-text)]">{title}</div>
         {typeof event.type === 'string' && event.type.trim() ? (
-          <Badge variant="outline" className="h-5 shrink-0 border-[#303238] bg-[#25262a] px-1.5 text-[10px] text-[#93a4bb]">
+          <Badge variant="outline" className="h-5 shrink-0 border-[var(--nova-border)] bg-[var(--nova-surface)] px-1.5 text-[10px] text-[var(--nova-text-muted)]">
             {event.type.trim()}
           </Badge>
         ) : null}
       </div>
-      {description ? <div className="mb-2 whitespace-pre-wrap text-[#aeb6c4]">{description}</div> : null}
+      {description ? <div className="mb-2 whitespace-pre-wrap text-[var(--nova-text-muted)]">{description}</div> : null}
       {detailEntries.length ? (
         <dl className="grid gap-1.5">
           {detailEntries.map(([key, value]) => (
             <div key={key} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
-              <dt className="truncate text-[#747f91]" title={formatLabel(key)}>{formatLabel(key)}</dt>
-              <dd className="min-w-0 text-[#aeb6c4]">{renderReadableValue(value)}</dd>
+              <dt className="truncate text-[var(--nova-text-faint)]" title={formatLabel(key)}>{formatLabel(key)}</dt>
+              <dd className="min-w-0 text-[var(--nova-text-muted)]">{renderReadableValue(value)}</dd>
             </div>
           ))}
         </dl>
@@ -248,11 +248,11 @@ function EventItem({ event, index }: { event: unknown; index: number }) {
 }
 
 function CompactList({ items, empty }: { items: unknown[]; empty: string }) {
-  if (!items.length) return <div className="text-xs text-[#a8adb7]">{empty}</div>
+  if (!items.length) return <div className="text-xs text-[var(--nova-text-muted)]">{empty}</div>
   return (
-    <div className="space-y-1.5 text-xs text-[#a8adb7]">
+    <div className="space-y-1.5 text-xs text-[var(--nova-text-muted)]">
       {items.map((item, index) => (
-        <div key={index} className="rounded-md border border-[#303238] bg-[#202124] px-2 py-1.5">
+        <div key={index} className={`${panelCardClass} px-2 py-1.5`}>
           {renderReadableValue(item)}
         </div>
       ))}
@@ -263,7 +263,7 @@ function CompactList({ items, empty }: { items: unknown[]; empty: string }) {
 function LabeledList({ label, items, empty }: { label: string; items: unknown[]; empty: string }) {
   return (
     <div>
-      <div className="mb-1 text-[10px] font-medium text-[#747f91]">{label}</div>
+      <div className="mb-1 text-[10px] font-medium text-[var(--nova-text-faint)]">{label}</div>
       <CompactList items={items} empty={empty} />
     </div>
   )
@@ -271,12 +271,12 @@ function LabeledList({ label, items, empty }: { label: string; items: unknown[];
 
 function renderReadableValue(value: unknown): ReactNode {
   if (Array.isArray(value)) {
-    if (!value.length) return <span className="text-[#747f91]">空</span>
+    if (!value.length) return <span className="text-[var(--nova-text-faint)]">空</span>
     if (value.every((item) => !isPlainObject(item) && !Array.isArray(item))) {
       return (
         <div className="flex flex-wrap gap-1">
           {value.map((item, index) => (
-            <Badge key={index} variant="secondary" className="border border-[#3a3d44] bg-[#25262a] text-[#d7dbe2]">
+            <Badge key={index} variant="secondary" className="border border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text)]">
               {formatScalar(item)}
             </Badge>
           ))}
@@ -286,7 +286,7 @@ function renderReadableValue(value: unknown): ReactNode {
     return (
       <div className="space-y-1">
         {value.map((item, index) => (
-          <div key={index} className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1">
+          <div key={index} className="rounded border border-[var(--nova-border)] bg-[var(--nova-surface)] px-2 py-1">
             {renderReadableValue(item)}
           </div>
         ))}
@@ -295,12 +295,12 @@ function renderReadableValue(value: unknown): ReactNode {
   }
   if (isPlainObject(value)) {
     const entries = Object.entries(value)
-    if (!entries.length) return <span className="text-[#747f91]">空</span>
+    if (!entries.length) return <span className="text-[var(--nova-text-faint)]">空</span>
     return (
       <div className="space-y-1">
         {entries.map(([key, item]) => (
           <div key={key} className="grid grid-cols-[64px_minmax(0,1fr)] gap-1">
-            <span className="text-[#747f91]">{formatLabel(key)}</span>
+            <span className="text-[var(--nova-text-faint)]">{formatLabel(key)}</span>
             <span className="min-w-0">{renderReadableValue(item)}</span>
           </div>
         ))}
@@ -436,3 +436,7 @@ const FIELD_WORDS: Record<string, string> = {
 
 const EVENT_PRIMARY_KEYS = new Set(['title', 'name', 'flag', 'event', '事件名', 'description', 'summary', 'content', 'text', '事件', '描述', 'type'])
 const SCENE_METRIC_KEYS = new Set(['location', 'place', 'name', '地点', '场景'])
+
+const panelSectionClass = 'mb-3 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-3'
+const panelCardClass = 'rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)]'
+const sectionTitleClass = 'mb-3 flex items-center gap-2 text-xs font-semibold text-[var(--nova-text-muted)]'

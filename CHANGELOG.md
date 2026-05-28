@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- 后端资料库：新增资料库编辑 Agent，按用户中文指令生成结构化 create/update/delete 操作并批量应用到 `.nova/lore/items.json`；新增资料库非 Git 版本快照，资料创建、更新、删除、Agent 批量编辑和版本恢复前都会写入 `.nova/lore/versions/`，并提供版本列表、手动快照和恢复接口
+- WebUI：互动资料库面板新增资料库 Agent 指令栏与资料库版本列表，支持一键批量整理资料、查看变更摘要、手动创建版本和恢复历史版本
 - 后端 Agent：增强每轮对话上下文组成日志，按来源记录会话历史、本轮请求、文件引用、风格参考、场景化风格规则、编辑器选区和上下文边界，并输出各段标题/规则名与短 preview，便于排查实际注入内容
 - WebUI/互动模式：讲述者注入规则新增“内部思考”目标，后端会把对应规则作为本轮 reasoning/thinking 引导注入；讲述者配置页将 Prompt Slot 改为中文注入规则卡片，启用状态改为开关，并补充各注入位置、状态引擎和边界引擎说明
 - WebUI：支持导入 SillyTavern 酒馆角色卡，PNG `chara` 元数据与 JSON 角色卡均可上传，后端会转换为中文 Markdown 并追加到 `setting/characters.md`，导入后自动刷新并打开角色卡片文件

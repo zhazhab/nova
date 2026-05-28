@@ -128,6 +128,22 @@ export interface LoreItem {
 
 export type LoreItemInput = Omit<LoreItem, 'created_at' | 'updated_at'>
 
+export interface LoreVersion {
+  id: string
+  message: string
+  created_at: string
+  item_count: number
+}
+
+export interface LoreAgentResult {
+  message: string
+  version?: LoreVersion
+  items: LoreItem[]
+  created: LoreItem[]
+  updated: LoreItem[]
+  deleted_ids: string[]
+}
+
 async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const data = await res.json()
@@ -380,6 +396,34 @@ export async function updateLoreItem(id: string, item: Partial<LoreItemInput>): 
 
 export async function deleteLoreItem(id: string): Promise<void> {
   await requestJSON(`/api/lore/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function runLoreAgent(instruction: string): Promise<LoreAgentResult> {
+  return requestJSON('/api/lore/agent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction }),
+  })
+}
+
+export async function getLoreVersions(): Promise<LoreVersion[]> {
+  const data = await requestJSON<{ versions: LoreVersion[] }>('/api/lore/versions')
+  return data.versions || []
+}
+
+export async function createLoreVersion(message: string): Promise<LoreVersion> {
+  return requestJSON('/api/lore/versions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+}
+
+export async function restoreLoreVersion(id: string): Promise<LoreItem[]> {
+  const data = await requestJSON<{ items: LoreItem[] }>(`/api/lore/versions/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+  })
+  return data.items || []
 }
 
 /** 新建文件或目录 */

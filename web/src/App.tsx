@@ -816,7 +816,7 @@ function App() {
       />
       <Dialog open={bookManagerOpen} onOpenChange={setBookManagerOpen}>
         <DialogContent
-          className="nova-panel left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)]"
+          className="nova-panel left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)] sm:max-w-[96vw]"
           showCloseButton={false}
           aria-describedby={undefined}
         >
@@ -833,7 +833,7 @@ function App() {
       </Dialog>
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent
-          className="nova-panel left-[2vw] top-[4vh] h-[92vh] max-h-[96vh] min-h-[520px] w-[96vw] max-w-[96vw] min-w-[min(760px,96vw)] translate-x-0 translate-y-0 resize overflow-hidden border p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)]"
+          className="nova-panel left-[2vw] top-[4vh] flex h-[92dvh] max-h-[calc(100dvh-2rem)] min-h-0 w-[96vw] max-w-[calc(100vw-2rem)] min-w-0 translate-x-0 translate-y-0 resize overflow-hidden rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] p-0 text-[var(--nova-text)] shadow-[var(--nova-shadow)] sm:max-w-[calc(100vw-2rem)]"
           showCloseButton={false}
           aria-describedby={undefined}
         >

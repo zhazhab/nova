@@ -248,13 +248,13 @@ export function InteractiveLayout({
               </button>
               {leftPanelVisible && (
                 <div className="mt-2 flex items-center gap-2 px-4 py-1 text-[11px] text-[var(--nova-text-faint)]">
-                  <span className={`h-2 w-2 rounded-full ${snapshot?.current_turn?.state_status === 'pending' ? 'bg-[#d6aa62]' : 'bg-[#81b38d]'}`} />
+                  <span className={`h-2 w-2 rounded-full ${snapshot?.current_turn?.state_status === 'pending' ? 'bg-[var(--nova-accent)]' : 'bg-[var(--nova-accent-green)]'}`} />
                   <span className="truncate">{snapshot?.current_turn?.state_status === 'pending' ? '场景同步中' : '已同步'}</span>
                 </div>
               )}
             </div>
           </aside>
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col bg-[var(--nova-surface-2)]">
             {settingsWorkspaceVisible ? (
               <SettingPanel
                 mode={settingMode}
@@ -329,7 +329,7 @@ function InteractiveResizeHandle({ direction, label, prominent = false }: { dire
 
   return (
     <Separator aria-label={label} className={className}>
-      <span className={`flex items-center justify-center rounded-full border border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-faint)] shadow-[0_4px_14px_rgba(0,0,0,0.22)] transition-colors group-hover:border-[#3a3a3a] group-data-[resize-handle-active]:border-[#4a4a4a] group-data-[resize-handle-active]:text-[var(--nova-text)] ${direction === 'vertical' ? 'h-9 w-2.5' : 'h-2.5 w-16'}`}>
+      <span className={`flex items-center justify-center rounded-full border border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-faint)] shadow-[0_4px_14px_rgba(0,0,0,0.22)] transition-colors group-hover:border-[var(--nova-active)] group-data-[resize-handle-active]:border-[var(--nova-active)] group-data-[resize-handle-active]:text-[var(--nova-text)] ${direction === 'vertical' ? 'h-9 w-2.5' : 'h-2.5 w-16'}`}>
         <Icon className={direction === 'vertical' ? 'h-3.5 w-3.5' : 'h-3 w-3'} aria-hidden="true" />
       </span>
     </Separator>

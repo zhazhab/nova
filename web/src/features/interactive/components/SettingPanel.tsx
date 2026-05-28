@@ -1,14 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { BookMarked, Building2, ChevronDown, Database, FileText, Folder, Library, MapPin, Plus, Save, ScrollText, Search, SlidersHorizontal, Trash2, UserRound } from 'lucide-react'
+import { BookMarked, Bot, Building2, ChevronDown, Database, FileText, Folder, History, Library, Loader2, MapPin, Plus, RotateCcw, Save, ScrollText, Search, SlidersHorizontal, Trash2, UserRound } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  createLoreVersion,
   createLoreItem,
   deleteLoreItem,
   getLoreItems,
+  getLoreVersions,
   readFile,
+  restoreLoreVersion,
+  runLoreAgent,
   saveFile,
   updateLoreItem,
   type LoreItem,
+  type LoreVersion,
 } from '@/lib/api'
 import { isSaveShortcut } from '@/lib/keyboard'
 import { Button } from '@/components/ui/button'
@@ -120,6 +125,11 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
   const [draft, setDraft] = useState<LoreItem | null>(null)
   const [tagDraft, setTagDraft] = useState('')
   const [query, setQuery] = useState('')
+  const [loreAgentInput, setLoreAgentInput] = useState('')
+  const [loreAgentResult, setLoreAgentResult] = useState('')
+  const [loreAgentRunning, setLoreAgentRunning] = useState(false)
+  const [versions, setVersions] = useState<LoreVersion[]>([])
+  const [versionsVisible, setVersionsVisible] = useState(false)
   const [creatorContent, setCreatorContent] = useState('')
   const [tellers, setTellers] = useState<Teller[]>(externalTellers)
   const [activeTellerId, setActiveTellerId] = useState('')
@@ -141,6 +151,11 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
       })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (activeMode !== 'lore') return
+    void refreshVersions()
+  }, [activeMode])
 
   useEffect(() => {
     const item = items.find((entry) => entry.id === activeId) || null
@@ -178,6 +193,11 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
     const data = await getLoreItems()
     setItems(data)
     setActiveId(nextActiveId || data[0]?.id || '')
+  }
+
+  const refreshVersions = async () => {
+    const data = await getLoreVersions()
+    setVersions(data)
   }
 
   const refreshTellers = async (nextActiveId?: string) => {
@@ -261,15 +281,64 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
     }
   }
 
+  const handleRunLoreAgent = async () => {
+    const instruction = loreAgentInput.trim()
+    if (!instruction) return
+    setLoreAgentRunning(true)
+    setLoreAgentResult('')
+    try {
+      const result = await runLoreAgent(instruction)
+      setItems(result.items || [])
+      const nextActive = result.updated?.[0]?.id || result.created?.[0]?.id || activeId || result.items?.[0]?.id || ''
+      setActiveId(nextActive)
+      const changed = [
+        result.created?.length ? `新增 ${result.created.length}` : '',
+        result.updated?.length ? `更新 ${result.updated.length}` : '',
+        result.deleted_ids?.length ? `删除 ${result.deleted_ids.length}` : '',
+      ].filter(Boolean).join('，')
+      setLoreAgentResult(`${result.message}${changed ? `（${changed}）` : ''}`)
+      setLoreAgentInput('')
+      await refreshVersions()
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '资料库 Agent 执行失败')
+    } finally {
+      setLoreAgentRunning(false)
+    }
+  }
+
+  const handleCreateLoreVersion = async () => {
+    setSaving(true)
+    try {
+      await createLoreVersion('手动创建资料库版本')
+      await refreshVersions()
+      setVersionsVisible(true)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRestoreLoreVersion = async (version: LoreVersion) => {
+    if (!window.confirm(`恢复资料库版本「${version.message || version.id}」？`)) return
+    setSaving(true)
+    try {
+      const restored = await restoreLoreVersion(version.id)
+      setItems(restored)
+      setActiveId(restored[0]?.id || '')
+      await refreshVersions()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <section className="flex h-full min-h-0 bg-[#1b1c1f] text-[#d7dbe2]">
-      <aside className="flex w-[320px] shrink-0 flex-col border-r border-[#303238] bg-[#202124]">
-        <div className="border-b border-[#303238] px-3 py-3">
+    <section className="flex h-full min-h-0 bg-[var(--nova-surface-2)] text-[var(--nova-text)]">
+      <aside className="nova-sidebar flex w-[320px] shrink-0 flex-col border-r">
+        <div className="border-b border-[var(--nova-border)] px-3 py-3">
           <div className="flex items-center gap-2">
             <ModeIcon mode={activeMode} />
-            <div className="text-sm font-semibold text-[#e0e4ec]">{panelTitle(activeMode)}</div>
+            <div className="text-sm font-semibold text-[var(--nova-text)]">{panelTitle(activeMode)}</div>
           </div>
-          <div className="mt-1 text-[11px] text-[#858b96]">在目录中选择条目，右侧打开编辑。</div>
+          <div className="mt-1 text-[11px] text-[var(--nova-text-faint)]">在目录中选择条目，右侧打开编辑。</div>
         </div>
 
         {activeMode === 'lore' ? (
@@ -295,27 +364,27 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
         )}
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col bg-[#1b1c1f]">
-        <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-[#303238] bg-[#1f2023] px-4">
+      <main className="flex min-w-0 flex-1 flex-col bg-[var(--nova-surface-2)]">
+        <div className="nova-topbar flex min-h-12 shrink-0 items-center justify-between gap-3 border-b px-4">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <ModeIcon mode={activeMode} />
-              <h2 className="truncate text-sm font-semibold text-[#e0e4ec]">{editorTitle(activeMode, draft, tellerDraft)}</h2>
+              <h2 className="truncate text-sm font-semibold text-[var(--nova-text)]">{editorTitle(activeMode, draft, tellerDraft)}</h2>
             </div>
-            <p className="mt-0.5 truncate text-[11px] text-[#858b96]">{editorSubtitle(activeMode, draft, tellerDraft)}</p>
+            <p className="mt-0.5 truncate text-[11px] text-[var(--nova-text-faint)]">{editorSubtitle(activeMode, draft, tellerDraft)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {activeMode === 'lore' && (
-              <Button className="border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="icon" disabled={saving || !draft} onClick={handleDelete} aria-label="删除资料">
+              <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || !draft} onClick={handleDelete} aria-label="删除资料">
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
             {activeMode === 'teller' && (
-              <Button className="border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="icon" disabled={saving || !tellerDraft?.custom} onClick={handleDelete} aria-label="删除讲述者">
+              <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || !tellerDraft?.custom} onClick={handleDelete} aria-label="删除讲述者">
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
-            <Button className="gap-1.5 border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="sm" disabled={saving || (activeMode === 'lore' && !draft) || (activeMode === 'teller' && !tellerDraft)} onClick={handleSave}>
+            <Button className={actionButtonClassName} variant="outline" size="sm" disabled={saving || (activeMode === 'lore' && !draft) || (activeMode === 'teller' && !tellerDraft)} onClick={handleSave}>
               <Save className="h-4 w-4" />
               {saving ? '保存中...' : '保存'}
             </Button>
@@ -323,7 +392,22 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
         </div>
 
         {activeMode === 'lore' ? (
-          <LoreEditor draft={draft} tagDraft={tagDraft} setDraft={setDraft} setTagDraft={setTagDraft} onSave={handleSave} />
+          <>
+            <LoreAgentPanel
+              value={loreAgentInput}
+              result={loreAgentResult}
+              running={loreAgentRunning}
+              saving={saving}
+              versions={versions}
+              versionsVisible={versionsVisible}
+              onValueChange={setLoreAgentInput}
+              onRun={() => void handleRunLoreAgent()}
+              onToggleVersions={() => setVersionsVisible((value) => !value)}
+              onCreateVersion={() => void handleCreateLoreVersion()}
+              onRestoreVersion={(version) => void handleRestoreLoreVersion(version)}
+            />
+            <LoreEditor draft={draft} tagDraft={tagDraft} setDraft={setDraft} setTagDraft={setTagDraft} onSave={handleSave} />
+          </>
         ) : activeMode === 'creator' ? (
           <CreatorEditor content={creatorContent} setContent={setCreatorContent} onSave={handleSave} />
         ) : (
@@ -339,6 +423,94 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
         )}
       </main>
     </section>
+  )
+}
+
+function LoreAgentPanel({
+  value,
+  result,
+  running,
+  saving,
+  versions,
+  versionsVisible,
+  onValueChange,
+  onRun,
+  onToggleVersions,
+  onCreateVersion,
+  onRestoreVersion,
+}: {
+  value: string
+  result: string
+  running: boolean
+  saving: boolean
+  versions: LoreVersion[]
+  versionsVisible: boolean
+  onValueChange: (value: string) => void
+  onRun: () => void
+  onToggleVersions: () => void
+  onCreateVersion: () => void
+  onRestoreVersion: (version: LoreVersion) => void
+}) {
+  return (
+    <div className="shrink-0 border-b border-[var(--nova-border)] bg-[var(--nova-surface)] px-4 py-3">
+      <div className="flex items-start gap-2">
+        <div className="nova-field flex min-w-0 flex-1 items-start gap-2 rounded-[var(--nova-radius)] px-3 py-2">
+          <Bot className="mt-1 h-4 w-4 shrink-0 text-[var(--nova-text-faint)]" />
+          <textarea
+            className="min-h-10 flex-1 resize-none bg-transparent text-sm leading-5 text-[var(--nova-text)] outline-none placeholder:text-[var(--nova-text-faint)]"
+            value={value}
+            onChange={(event) => onValueChange(event.target.value)}
+            placeholder="例如：合并重复角色，补齐主角阵营关系，删除过期模板"
+            rows={2}
+          />
+        </div>
+        <Button className={actionButtonClassName} variant="outline" size="sm" disabled={running || !value.trim()} onClick={onRun}>
+          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+          {running ? '执行中...' : '执行'}
+        </Button>
+        <Button className={actionButtonClassName} variant="outline" size="sm" onClick={onToggleVersions}>
+          <History className="h-4 w-4" />
+          版本
+        </Button>
+      </div>
+      {(result || versionsVisible) && (
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_360px]">
+          <div className="min-h-8 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-3 py-2 text-xs text-[var(--nova-text-muted)]">
+            {result || '暂无 Agent 变更'}
+          </div>
+          {versionsVisible && (
+            <div className="rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)]">
+              <div className="flex h-9 items-center justify-between border-b border-[var(--nova-border)] px-3">
+                <span className="text-xs font-medium text-[var(--nova-text-muted)]">资料库版本</span>
+                <Button className={actionButtonClassName} variant="outline" size="sm" disabled={saving} onClick={onCreateVersion}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="max-h-40 overflow-auto p-2">
+                {versions.length ? versions.map((version) => (
+                  <div key={version.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)]">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[var(--nova-text)]">{version.message || version.id}</div>
+                      <div className="truncate text-[11px] text-[var(--nova-text-faint)]">{formatDateTime(version.created_at)} · {version.item_count} 条</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="nova-nav-item rounded p-1 text-[var(--nova-text-faint)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]"
+                      onClick={() => onRestoreVersion(version)}
+                      aria-label="恢复资料库版本"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )) : (
+                  <div className="px-2 py-3 text-xs text-[var(--nova-text-faint)]">暂无版本</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -361,11 +533,11 @@ function LoreDirectory({
 }) {
   return (
     <>
-      <div className="border-b border-[#303238] p-2">
-        <div className="flex h-8 items-center gap-2 rounded-md border border-[#303238] bg-[#1b1c1f] px-2 text-xs text-[#858b96]">
+      <div className="border-b border-[var(--nova-border)] p-2">
+        <div className="nova-field flex h-8 items-center gap-2 rounded-[var(--nova-radius)] px-2 text-xs text-[var(--nova-text-faint)]">
           <Search className="h-3.5 w-3.5" />
           <input
-            className="min-w-0 flex-1 bg-transparent text-[#c5c9d1] outline-none placeholder:text-[#6f7580]"
+            className="min-w-0 flex-1 bg-transparent text-[var(--nova-text-muted)] outline-none placeholder:text-[var(--nova-text-faint)]"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="搜索资料"
@@ -379,14 +551,14 @@ function LoreDirectory({
             const Icon = section.icon
             return (
               <section key={section.id} className="mb-2">
-                <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[#a8adb7]">
-                  <ChevronDown className="h-3.5 w-3.5 text-[#858b96]" />
-                  <Icon className="h-3.5 w-3.5 text-[#9aa0aa]" />
+                <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[var(--nova-text-muted)]">
+                  <ChevronDown className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
+                  <Icon className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
                   <span className="min-w-0 flex-1 truncate font-medium">{section.label}</span>
-                  <span className="text-[11px] text-[#858b96]">{entries.length}</span>
+                  <span className="text-[11px] text-[var(--nova-text-faint)]">{entries.length}</span>
                   <button
                     type="button"
-                    className="rounded p-1 text-[#858b96] hover:bg-[#303238] hover:text-[#d7dbe2]"
+                    className="nova-nav-item rounded p-1 text-[var(--nova-text-faint)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]"
                     disabled={saving}
                     onClick={() => onCreate(section)}
                     aria-label={`新建${section.label}`}
@@ -394,21 +566,21 @@ function LoreDirectory({
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <div className="ml-5 space-y-0.5 border-l border-[#303238] pl-2">
+                <div className="ml-5 space-y-0.5 border-l border-[var(--nova-border)] pl-2">
                   {entries.length ? entries.map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => onSelect(item.id)}
                       className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs transition ${
-                        activeId === item.id ? 'bg-[#303238] text-[#f0f2f5]' : 'text-[#aeb4bf] hover:bg-[#25262a] hover:text-[#d7dbe2]'
+                        activeId === item.id ? 'is-active bg-[var(--nova-active)] text-[var(--nova-text)]' : 'text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
                       }`}
                     >
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-[#858b96]" />
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-faint)]" />
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
                     </button>
                   )) : (
-                    <div className="px-2 py-1.5 text-[11px] text-[#6f7580]">暂无条目</div>
+                    <div className="px-2 py-1.5 text-[11px] text-[var(--nova-text-faint)]">暂无条目</div>
                   )}
                 </div>
               </section>
@@ -423,14 +595,14 @@ function LoreDirectory({
 function CreatorDirectory() {
   return (
     <div className="p-2">
-      <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[#a8adb7]">
-        <ChevronDown className="h-3.5 w-3.5 text-[#858b96]" />
-        <Folder className="h-3.5 w-3.5 text-[#9aa0aa]" />
+      <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[var(--nova-text-muted)]">
+        <ChevronDown className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
+        <Folder className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
         <span className="font-medium">作品根目录</span>
       </div>
-      <div className="ml-5 border-l border-[#303238] pl-2">
-        <div className="flex h-8 items-center gap-2 rounded-md bg-[#303238] px-2 text-xs text-[#f0f2f5]">
-          <BookMarked className="h-3.5 w-3.5 text-[#a8adb7]" />
+      <div className="ml-5 border-l border-[var(--nova-border)] pl-2">
+        <div className="flex h-8 items-center gap-2 rounded-[var(--nova-radius)] bg-[var(--nova-active)] px-2 text-xs text-[var(--nova-text)]">
+          <BookMarked className="h-3.5 w-3.5 text-[var(--nova-text-muted)]" />
           <span className="truncate">{CREATOR_PATH}</span>
         </div>
       </div>
@@ -453,33 +625,33 @@ function TellerDirectory({
 }) {
   return (
     <>
-      <div className="flex h-10 items-center justify-between border-b border-[#303238] px-3">
-        <div className="text-xs font-medium text-[#a8adb7]">讲述者目录</div>
-        <Button className="h-7 border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="icon" disabled={saving} onClick={onCreate} aria-label="新建讲述者">
+      <div className="flex h-10 items-center justify-between border-b border-[var(--nova-border)] px-3">
+        <div className="text-xs font-medium text-[var(--nova-text-muted)]">讲述者目录</div>
+        <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving} onClick={onCreate} aria-label="新建讲述者">
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
-          <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[#a8adb7]">
-            <ChevronDown className="h-3.5 w-3.5 text-[#858b96]" />
-            <Folder className="h-3.5 w-3.5 text-[#9aa0aa]" />
+          <div className="flex h-8 items-center gap-2 rounded px-2 text-xs text-[var(--nova-text-muted)]">
+            <ChevronDown className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
+            <Folder className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
             <span className="font-medium">规则包</span>
           </div>
-          <div className="ml-5 space-y-0.5 border-l border-[#303238] pl-2">
+          <div className="ml-5 space-y-0.5 border-l border-[var(--nova-border)] pl-2">
             {tellers.map((teller) => (
               <button
                 key={teller.id}
                 type="button"
                 onClick={() => onSelect(teller.id)}
                 className={`flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition ${
-                  activeTellerId === teller.id ? 'bg-[#303238] text-[#f0f2f5]' : 'text-[#aeb4bf] hover:bg-[#25262a] hover:text-[#d7dbe2]'
+                  activeTellerId === teller.id ? 'bg-[var(--nova-active)] text-[var(--nova-text)]' : 'text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
                 }`}
               >
-                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[#858b96]" />
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-faint)]" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{teller.name}</span>
-                  <span className="block truncate text-[11px] text-[#858b96]">{teller.custom ? '自定义' : '内置'} · {(teller.slots || []).filter((slot) => slot.enabled).length} 条启用规则</span>
+                  <span className="block truncate text-[11px] text-[var(--nova-text-faint)]">{teller.custom ? '自定义' : '内置'} · {(teller.slots || []).filter((slot) => slot.enabled).length} 条启用规则</span>
                 </span>
               </button>
             ))}
@@ -509,7 +681,7 @@ function LoreEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid shrink-0 gap-3 border-b border-[#303238] bg-[#202124] p-4 lg:grid-cols-[minmax(220px,1fr)_180px_180px]">
+      <div className="grid shrink-0 gap-3 border-b border-[var(--nova-border)] bg-[var(--nova-surface)] p-4 lg:grid-cols-[minmax(220px,1fr)_180px_180px]">
         <Field label="名称">
           <Input className={inputClassName} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         </Field>
@@ -518,7 +690,7 @@ function LoreEditor({
             <SelectTrigger size="sm" className={selectClassName}>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="border-[#303238] bg-[#25262a] text-[#d7dbe2]">
+            <SelectContent className="nova-panel border text-[var(--nova-text)]">
               {TYPE_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
               ))}
@@ -530,7 +702,7 @@ function LoreEditor({
             <SelectTrigger size="sm" className={selectClassName}>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="border-[#303238] bg-[#25262a] text-[#d7dbe2]">
+            <SelectContent className="nova-panel border text-[var(--nova-text)]">
               {IMPORTANCE_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
               ))}
@@ -543,7 +715,7 @@ function LoreEditor({
       </div>
       <div className="min-h-0 flex-1 p-4">
         <Textarea
-          className="h-full min-h-[360px] resize-none border-[#303238] bg-[#202124] font-mono text-sm leading-7 text-[#d7dbe2] shadow-none focus-visible:ring-0"
+          className="nova-field h-full min-h-[360px] resize-none font-mono text-sm leading-7 shadow-none focus-visible:ring-0"
           value={draft.content || ''}
           onChange={(event) => setDraft({ ...draft, content: event.target.value })}
           onKeyDown={(event) => {
@@ -571,7 +743,7 @@ function CreatorEditor({
   return (
     <div className="min-h-0 flex-1 p-4">
       <Textarea
-        className="h-full min-h-[520px] resize-none border-[#303238] bg-[#202124] font-mono text-sm leading-7 text-[#d7dbe2] shadow-none focus-visible:ring-0"
+        className="nova-field h-full min-h-[520px] resize-none font-mono text-sm leading-7 shadow-none focus-visible:ring-0"
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="写下本书最高优先级的创作规则..."
@@ -643,7 +815,7 @@ function TellerEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid shrink-0 gap-3 border-b border-[#303238] bg-[#202124] p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_150px]">
+      <div className="grid shrink-0 gap-3 border-b border-[var(--nova-border)] bg-[var(--nova-surface)] p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_150px]">
         <Field label="名称">
           <Input className={inputClassName} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         </Field>
@@ -667,15 +839,15 @@ function TellerEditor({
           />
         </Field>
         <div className="flex items-end">
-          <span className="rounded border border-[#303238] bg-[#1b1c1f] px-2 py-1 text-xs text-[#858b96]">{draft.custom ? '自定义' : '内置'}</span>
+          <span className="rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2 py-1 text-xs text-[var(--nova-text-faint)]">{draft.custom ? '自定义' : '内置'}</span>
         </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col border-r border-[#303238] bg-[#202124]">
-          <div className="flex h-11 items-center justify-between border-b border-[#303238] px-3">
-            <div className="text-xs font-medium text-[#c5c9d1]">注入规则</div>
-            <Button className="h-7 border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="icon" onClick={addSlot} aria-label="新增注入规则">
+        <aside className="flex min-h-0 flex-col border-r border-[var(--nova-border)] bg-[var(--nova-surface)]">
+          <div className="flex h-11 items-center justify-between border-b border-[var(--nova-border)] px-3">
+            <div className="text-xs font-medium text-[var(--nova-text-muted)]">注入规则</div>
+            <Button className={iconActionClassName} variant="outline" size="icon" onClick={addSlot} aria-label="新增注入规则">
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -687,15 +859,15 @@ function TellerEditor({
                   type="button"
                   onClick={() => setActiveSlotId(slot.id)}
                   className={`mb-1 flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${
-                    activeSlot?.id === slot.id ? 'bg-[#303238] text-[#f0f2f5]' : 'text-[#aeb4bf] hover:bg-[#25262a] hover:text-[#d7dbe2]'
+                    activeSlot?.id === slot.id ? 'bg-[var(--nova-active)] text-[var(--nova-text)]' : 'text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
                   }`}
                 >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-[#858b96]" />
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-faint)]" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{slot.name}</span>
-                    <span className="block truncate text-[11px] text-[#858b96]">{targetLabel(slot.target)} · {slot.enabled ? '已启用' : '已停用'}</span>
+                    <span className="block truncate text-[11px] text-[var(--nova-text-faint)]">{targetLabel(slot.target)} · {slot.enabled ? '已启用' : '已停用'}</span>
                   </span>
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${slot.enabled ? 'bg-[#81b38d]' : 'bg-[#565c66]'}`} />
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${slot.enabled ? 'bg-[var(--nova-accent-green)]' : 'bg-[var(--nova-active)]'}`} />
                 </button>
               ))}
             </div>
@@ -704,16 +876,16 @@ function TellerEditor({
 
         {activeSlot ? (
           <section className="flex min-h-0 flex-col">
-            <div className="shrink-0 border-b border-[#303238] bg-[#202124] p-4">
+            <div className="shrink-0 border-b border-[var(--nova-border)] bg-[var(--nova-surface)] p-4">
               <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,420px)]">
                 <Field label="规则名称">
                   <Input className={inputClassName} value={activeSlot.name} onChange={(event) => updateSlot({ name: event.target.value })} />
                 </Field>
-                <div className="flex items-end justify-between gap-3 rounded-md border border-[#303238] bg-[#1b1c1f] px-3 py-2">
+                <div className="flex items-end justify-between gap-3 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-3 py-2">
                   <div className="min-w-0">
-                    <div className="text-[11px] text-[#858b96]">Prompt 效果</div>
-                    <div className="mt-1 truncate text-xs font-medium text-[#d7dbe2]">{selectedTarget.label}</div>
-                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[#858b96]">{selectedTarget.detail}</div>
+                    <div className="text-[11px] text-[var(--nova-text-faint)]">Prompt 效果</div>
+                    <div className="mt-1 truncate text-xs font-medium text-[var(--nova-text)]">{selectedTarget.label}</div>
+                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[var(--nova-text-faint)]">{selectedTarget.detail}</div>
                   </div>
                   <ToggleSwitch checked={activeSlot.enabled} onChange={(enabled) => updateSlot({ enabled })} />
                 </div>
@@ -722,10 +894,10 @@ function TellerEditor({
               <div className="mt-4">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-xs font-medium text-[#c5c9d1]">注入位置</div>
-                    <div className="mt-0.5 text-[11px] text-[#858b96]">选择这条规则交给哪一段 Agent 流程使用。</div>
+                    <div className="text-xs font-medium text-[var(--nova-text-muted)]">注入位置</div>
+                    <div className="mt-0.5 text-[11px] text-[var(--nova-text-faint)]">选择这条规则交给哪一段 Agent 流程使用。</div>
                   </div>
-                  <Button className="h-8 border-[#303238] bg-[#25262a] text-[#d7dbe2] hover:bg-[#303238]" variant="outline" size="icon" disabled={(draft.slots || []).length <= 1} onClick={deleteSlot} aria-label="删除注入规则">
+                  <Button className={iconActionClassName} variant="outline" size="icon" disabled={(draft.slots || []).length <= 1} onClick={deleteSlot} aria-label="删除注入规则">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -739,12 +911,12 @@ function TellerEditor({
                         onClick={() => updateSlot({ target: option.value as TellerTarget })}
                         className={`min-h-[76px] rounded-md border p-3 text-left transition ${
                           selected
-                            ? 'border-[#d6aa62]/60 bg-[#2a271f] text-[#f0f2f5]'
-                            : 'border-[#303238] bg-[#1b1c1f] text-[#aeb4bf] hover:border-[#444850] hover:bg-[#25262a] hover:text-[#d7dbe2]'
+                            ? 'border-[var(--nova-accent)]/60 bg-[var(--nova-accent)]/10 text-[var(--nova-text)]'
+                            : 'border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)] hover:border-[var(--nova-active)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
                         }`}
                       >
                         <span className="block text-xs font-medium">{option.label}</span>
-                        <span className="mt-1 block text-[11px] leading-4 text-[#858b96]">{option.summary}</span>
+                        <span className="mt-1 block text-[11px] leading-4 text-[var(--nova-text-faint)]">{option.summary}</span>
                       </button>
                     )
                   })}
@@ -753,7 +925,7 @@ function TellerEditor({
             </div>
             <div className="min-h-0 flex-1 p-4">
               <Textarea
-                className="h-full min-h-[360px] resize-none border-[#303238] bg-[#202124] font-mono text-sm leading-7 text-[#d7dbe2] shadow-none focus-visible:ring-0"
+                className="nova-field h-full min-h-[360px] resize-none font-mono text-sm leading-7 shadow-none focus-visible:ring-0"
                 value={activeSlot.content}
                 onChange={(event) => updateSlot({ content: event.target.value })}
                 onKeyDown={(event) => {
@@ -777,7 +949,7 @@ function TellerEditor({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-1.5">
-      <span className="text-[11px] text-[#858b96]">{label}</span>
+      <span className="text-[11px] text-[var(--nova-text-faint)]">{label}</span>
       {children}
     </label>
   )
@@ -786,9 +958,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-      <div className="rounded-md border border-dashed border-[#303238] bg-[#202124] px-6 py-5 text-center">
-        <div className="text-sm font-medium text-[#d7dbe2]">{title}</div>
-        <div className="mt-1 text-xs text-[#858b96]">{description}</div>
+      <div className="rounded-[var(--nova-radius)] border border-dashed border-[var(--nova-border)] bg-[var(--nova-surface)] px-6 py-5 text-center">
+        <div className="text-sm font-medium text-[var(--nova-text)]">{title}</div>
+        <div className="mt-1 text-xs text-[var(--nova-text-faint)]">{description}</div>
       </div>
     </div>
   )
@@ -802,11 +974,11 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (chec
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 shrink-0 rounded-full border transition ${
-        checked ? 'border-[#81b38d]/60 bg-[#31543a]' : 'border-[#3a3d44] bg-[#25262a]'
+        checked ? 'border-[var(--nova-accent-green)]/60 bg-[var(--nova-accent-green)]/25' : 'border-[var(--nova-border)] bg-[var(--nova-surface-2)]'
       }`}
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#f0f2f5] shadow transition ${
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--nova-text)] shadow transition ${
           checked ? 'left-[22px]' : 'left-0.5'
         }`}
       />
@@ -815,8 +987,10 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (chec
   )
 }
 
-const inputClassName = 'h-8 border-[#303238] bg-[#1b1c1f] text-xs text-[#d7dbe2] focus-visible:ring-0'
-const selectClassName = 'h-8 border-[#303238] bg-[#1b1c1f] text-xs text-[#d7dbe2] focus:ring-0'
+const actionButtonClassName = 'nova-nav-item gap-1.5 border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
+const iconActionClassName = 'nova-nav-item border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]'
+const inputClassName = 'nova-field h-8 text-xs focus-visible:ring-0'
+const selectClassName = 'nova-field h-8 text-xs focus:ring-0'
 
 function splitTags(value: string) {
   return value
@@ -825,10 +999,22 @@ function splitTags(value: string) {
     .filter(Boolean)
 }
 
+function formatDateTime(value: string) {
+  if (!value) return '未知时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function ModeIcon({ mode }: { mode: SettingPanelMode }) {
-  if (mode === 'creator') return <BookMarked className="h-3.5 w-3.5 shrink-0 text-[#9aa0aa]" />
-  if (mode === 'teller') return <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[#9aa0aa]" />
-  return <Database className="h-3.5 w-3.5 shrink-0 text-[#9aa0aa]" />
+  if (mode === 'creator') return <BookMarked className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
+  if (mode === 'teller') return <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
+  return <Database className="h-3.5 w-3.5 shrink-0 text-[var(--nova-text-muted)]" />
 }
 
 function sectionItems(items: LoreItem[], section: KnowledgeSection, query = '') {

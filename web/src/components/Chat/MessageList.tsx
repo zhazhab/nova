@@ -143,7 +143,7 @@ export function MessageList({ messages, isStreaming, activityContent, highlightD
       ref={containerRef}
       onScroll={handleContainerScroll}
       onWheel={handleWheel}
-      className={`min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#15181d] px-6 py-5 ${bottomPaddingClassName}`}
+      className={`min-h-0 flex-1 space-y-4 overflow-y-auto bg-[var(--nova-surface-2)] px-6 py-5 ${bottomPaddingClassName}`}
     >
       {messages.length === 0 && !isStreaming && (
         <div className="flex h-full items-center justify-center text-sm text-[#858b96]">

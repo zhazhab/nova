@@ -121,8 +121,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '设置' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('button', { name: 'IDE 模式' })).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: '互动模式' })).toBeInTheDocument()
+    expect(within(dialog).getByText('IDE 模式')).toBeInTheDocument()
+    expect(within(dialog).getByText('互动模式')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '编辑器' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '故事舞台' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '关闭 设置' })).not.toBeInTheDocument()
   })
 })

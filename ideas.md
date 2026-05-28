@@ -30,7 +30,7 @@
 第一阶段：先做后端数据模型和 prompt slot 编排，不大改 UI。 --done
 第二阶段：把 teller 从 Markdown frontmatter 升级为 JSON 配置，支持多个 prompt slot。
 第三阶段：左侧资料库改成角色卡/世界观卡片/创作规则面板。
-第四阶段：加资料编辑 Agent，而且应该支持下基本的版本管理，不用git，自己实现。
+第四阶段：加资料库编辑 Agent，而且应该支持下基本的版本管理，不用git，自己实现。
 第五阶段：迁移 README、CHANGELOG、测试，并保持旧 Markdown 兼容读取。
 
 

@@ -196,18 +196,18 @@ export function BranchTimeline({
   }
 
   return (
-    <div className={`${fill ? 'h-full min-h-0' : expanded ? 'h-[min(260px,calc(100vh-96px))] min-h-[180px]' : 'h-[48px]'} border-t border-[#303238] bg-[#1f2023] px-3 py-2 transition-[height] sm:px-4`}>
-      <div className="flex items-center justify-between gap-2 text-xs text-[#858b96]">
-        <button type="button" className="flex items-center gap-1.5 font-medium text-[#c3cad6] hover:text-[#edf2fa]" onClick={() => setExpanded(!expanded)}>
-          <GitBranch className="h-3.5 w-3.5 text-[#7fa7d9]" />
+    <div className={`${fill ? 'h-full min-h-0' : expanded ? 'h-[min(260px,calc(100vh-96px))] min-h-[180px]' : 'h-[48px]'} border-t border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 py-2 transition-[height] sm:px-4`}>
+      <div className="flex items-center justify-between gap-2 text-xs text-[var(--nova-text-faint)]">
+        <button type="button" className="nova-nav-item flex items-center gap-1.5 rounded-[var(--nova-radius)] px-1.5 py-1 font-medium text-[var(--nova-text-muted)] hover:text-[var(--nova-text)]" onClick={() => setExpanded(!expanded)}>
+          <GitBranch className="h-3.5 w-3.5 text-[var(--nova-accent-blue)]" />
           剧情路线图
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-hidden">
-          <span className="truncate text-[#737d8d]">{graphNodes.length || snapshot?.turns?.length || 0} 个剧情节点</span>
-          {emptyBranchCount > 0 && <Badge variant="outline" className="hidden border-[#4a3d2f] bg-[#282119] text-[#d5aa72] sm:inline-flex">{emptyBranchCount} 条空剧情线</Badge>}
+          <span className="truncate text-[var(--nova-text-faint)]">{graphNodes.length || snapshot?.turns?.length || 0} 个剧情节点</span>
+          {emptyBranchCount > 0 && <Badge variant="outline" className="hidden border-[var(--nova-accent)]/35 bg-[var(--nova-accent)]/10 text-[var(--nova-accent)] sm:inline-flex">{emptyBranchCount} 条空剧情线</Badge>}
           {selectedNode && (
-            <Button variant="outline" size="xs" className="hidden gap-1.5 border-[#303238] bg-[#25262a] text-[#c3cbd7] hover:bg-[#303238] sm:inline-flex" onClick={openCreateDialog}>
+            <Button variant="outline" size="xs" className="nova-nav-item hidden gap-1.5 border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)] sm:inline-flex" onClick={openCreateDialog}>
               <Plus className="h-3.5 w-3.5" />
               从选中节点创建
             </Button>
@@ -216,38 +216,38 @@ export function BranchTimeline({
       </div>
 
       {expanded && (
-        <div className="mt-2 flex h-[calc(100%-32px)] min-h-0 flex-col overflow-hidden rounded-md border border-[#303238] bg-[#1b1c1f] shadow-[0_12px_28px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.04)]">
-          <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#303238] bg-[#202124]/95 px-3 py-1.5 backdrop-blur sm:px-4">
+        <div className="mt-2 flex h-[calc(100%-32px)] min-h-0 flex-col overflow-hidden rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] shadow-[var(--nova-shadow)]">
+          <div className="nova-topbar flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5 sm:px-4">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
               {layout.rows.map((row) => (
                 <button
                   key={row.branchId}
                   type="button"
-                  className={`flex h-7 shrink-0 items-center gap-2 rounded-md border px-2 text-xs transition ${row.branchId === currentBranchId ? 'border-[#5a5d64] bg-[#303238] text-[#f0f2f5]' : 'border-[#303238] bg-[#1b1c1f] text-[#9aa4b5] hover:border-[#4a4d54] hover:text-[#d6dce6]'}`}
+                  className={`nova-nav-item flex h-7 shrink-0 items-center gap-2 rounded-[var(--nova-radius)] border px-2 text-xs transition ${row.branchId === currentBranchId ? 'is-active text-[var(--nova-text)]' : 'border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-muted)] hover:text-[var(--nova-text)]'}`}
                   style={row.branchId === currentBranchId ? { borderColor: row.color, background: row.colorSoft } : undefined}
                   onClick={() => onSwitchBranch(row.branchId)}
                   title={formatBranchName(row.branch)}
                 >
                   <span className="h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor]" style={{ background: row.color, color: row.color }} />
                   <span className="max-w-32 truncate">{formatBranchName(row.branch)}</span>
-                  <span className="text-[#7e8898]">{row.nodes.length}</span>
+                  <span className="text-[var(--nova-text-faint)]">{row.nodes.length}</span>
                 </button>
               ))}
-              {layout.rows.length === 0 && <span className="text-xs text-[#858f9f]">还没有剧情路线。</span>}
+              {layout.rows.length === 0 && <span className="text-xs text-[var(--nova-text-faint)]">还没有剧情路线。</span>}
             </div>
-            <div className="flex shrink-0 items-center gap-2 text-[#8d96a7]">
+            <div className="flex shrink-0 items-center gap-2 text-[var(--nova-text-faint)]">
               <span className="hidden items-center gap-1.5 text-xs sm:flex">
                 <Move className="h-3.5 w-3.5" />
                 拖动或滚轮浏览
               </span>
-              <Button size="xs" variant="outline" className="gap-1.5 border-[#303238] bg-[#25262a] text-[#c4ccd8] hover:bg-[#303238]" disabled={!selectedNode} onClick={openCreateDialog}>
-                <Plus className="h-3.5 w-3.5 text-[#aeb4bf]" />
+              <Button size="xs" variant="outline" className="nova-nav-item gap-1.5 border-[var(--nova-border)] bg-[var(--nova-surface-2)] text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]" disabled={!selectedNode} onClick={openCreateDialog}>
+                <Plus className="h-3.5 w-3.5 text-[var(--nova-text-faint)]" />
                 创建剧情线
               </Button>
             </div>
           </div>
 
-          <div ref={scrollRef} className="min-h-0 flex-1 cursor-grab select-none overflow-auto overscroll-contain bg-[#1b1c1f] touch-none active:cursor-grabbing" data-testid="branch-graph-scroll">
+          <div ref={scrollRef} className="min-h-0 flex-1 cursor-grab select-none overflow-auto overscroll-contain bg-[var(--nova-surface-2)] touch-none active:cursor-grabbing" data-testid="branch-graph-scroll">
             <div
               data-testid="branch-graph-canvas"
               data-edge-count={layout.connections.length}
@@ -276,7 +276,7 @@ export function BranchTimeline({
                   key={node.id}
                   type="button"
                   data-no-drag
-                  className={`absolute z-10 flex h-[42px] cursor-pointer items-start gap-2 rounded-md border px-3 py-1.5 text-left shadow-[0_8px_18px_rgba(0,0,0,0.20)] backdrop-blur transition ${node.id === selectedNodeId ? 'border-[#c8ccd4] text-[#f3f4f6] ring-2 ring-[#c8ccd4]/18' : node.current ? 'border-[#aeb4bf] text-[#f0f2f5]' : 'border-[#3a3d44] text-[#c4ccd8] hover:border-[#737985]'}`}
+                  className={`absolute z-10 flex h-[42px] cursor-pointer items-start gap-2 rounded-[var(--nova-radius)] border px-3 py-1.5 text-left shadow-[0_8px_18px_rgba(0,0,0,0.20)] backdrop-blur transition ${node.id === selectedNodeId ? 'text-[var(--nova-text)] ring-2 ring-white/10' : node.current ? 'text-[var(--nova-text)]' : 'border-[var(--nova-border)] text-[var(--nova-text-muted)] hover:border-[var(--nova-active)] hover:text-[var(--nova-text)]'}`}
                   style={{
                     left: x,
                     top: y,
@@ -291,18 +291,18 @@ export function BranchTimeline({
                   title={`${node.title}\n${node.summary}`}
                 >
                   <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_14px_currentColor]" style={{ background: color, color }} />
-                  <span className="min-w-0 flex-1">
+                    <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium">{node.title}</span>
-                    <span className="mt-0.5 block truncate text-[11px] text-[#8e98a8]">{node.summary || '剧情节点'}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-[var(--nova-text-faint)]">{node.summary || '剧情节点'}</span>
                   </span>
-                  {node.head && <Badge variant="outline" className="h-5 border-[#303238] bg-[#25262a] px-1.5 text-[10px] text-[#aeb8c8]">HEAD</Badge>}
+                  {node.head && <Badge variant="outline" className="h-5 border-[var(--nova-border)] bg-[var(--nova-surface)] px-1.5 text-[10px] text-[var(--nova-text-muted)]">HEAD</Badge>}
                 </button>
               ))}
 
               {layout.emptyBranches.map((empty) => (
                 <div
                   key={empty.branch.id}
-                  className="absolute z-10 flex h-[38px] cursor-grab items-center gap-2 rounded-lg border border-dashed px-3 text-xs text-[#b7beca] active:cursor-grabbing"
+                  className="absolute z-10 flex h-[38px] cursor-grab items-center gap-2 rounded-[var(--nova-radius)] border border-dashed px-3 text-xs text-[var(--nova-text-muted)] active:cursor-grabbing"
                   style={{ left: empty.x, top: empty.y + 5, width: layout.metrics.nodeCardWidth, borderColor: empty.color, background: empty.colorSoft }}
                 >
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: empty.color }} />
@@ -310,7 +310,7 @@ export function BranchTimeline({
                   <button
                     type="button"
                     data-no-drag
-                    className="rounded p-1 text-[#9d6673] hover:bg-[#3a2028] hover:text-[#ff9aaa]"
+                    className="rounded p-1 text-red-300/70 hover:bg-red-500/15 hover:text-red-200"
                     onClick={() => deleteBranch(empty.branch)}
                     aria-label={`删除空剧情线 ${formatBranchName(empty.branch)}`}
                     title="删除空剧情线"
@@ -320,14 +320,14 @@ export function BranchTimeline({
                 </div>
               ))}
 
-              {layout.rows.length === 0 && <span className="absolute left-6 top-6 text-xs text-[#858b96]">还没有剧情节点，输入第一句话开始。</span>}
+              {layout.rows.length === 0 && <span className="absolute left-6 top-6 text-xs text-[var(--nova-text-faint)]">还没有剧情节点，输入第一句话开始。</span>}
             </div>
           </div>
 
-          <div className="flex min-h-[48px] shrink-0 items-center justify-between gap-3 border-t border-[#303238] bg-[#202124] px-3 text-xs text-[#818b9b] sm:px-4">
+          <div className="flex min-h-[48px] shrink-0 items-center justify-between gap-3 border-t border-[var(--nova-border)] bg-[var(--nova-surface)] px-3 text-xs text-[var(--nova-text-faint)] sm:px-4">
             {selectedNode ? (
               <div className="min-w-0">
-                <span className="text-[#d6dbe5]">已选节点：</span>
+                <span className="text-[var(--nova-text)]">已选节点：</span>
                 <span className="truncate">{selectedNode.title}</span>
               </div>
             ) : (
@@ -335,7 +335,7 @@ export function BranchTimeline({
             )}
             <MiniMap layout={layout} scrollRef={scrollRef} />
             {selectedNode && (
-              <Button size="xs" className="shrink-0 gap-1.5 bg-[#3a3d44] text-white hover:bg-[#4a4d54]" onClick={openCreateDialog}>
+              <Button size="xs" className="shrink-0 gap-1.5 border border-[var(--nova-border)] bg-[var(--nova-active)] text-[var(--nova-text)] hover:bg-[var(--nova-hover)]" onClick={openCreateDialog}>
                 <Plus className="h-3.5 w-3.5" />
                 创建剧情线
               </Button>
@@ -345,21 +345,21 @@ export function BranchTimeline({
       )}
 
       <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
-        <DialogContent className="border-[#303238] bg-[#202329] text-[#d7dbe2]">
+        <DialogContent className="nova-panel border text-[var(--nova-text)]">
           <DialogHeader>
             <DialogTitle>从选中节点创建剧情线</DialogTitle>
-            <DialogDescription className="text-[#9aa4b5]">
+            <DialogDescription className="text-[var(--nova-text-muted)]">
               {createSourceNode ? `将从「${createSourceNode.title}」分叉，创建后故事舞台会切换到新剧情线。` : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Input className="border-[#3a3d45] bg-[#17191d] text-sm" value={branchTitle} onChange={(event) => setBranchTitle(event.target.value)} placeholder="剧情线名称" />
-            {createSourceNode?.summary && <div className="rounded-md border border-[#303238] bg-[#1b1c1f] p-2 text-xs leading-5 text-[#aab2c0]">{createSourceNode.summary}</div>}
-            {createError && <div className="rounded-md border border-[#6a3535] bg-[#2c1b1b] p-2 text-xs text-[#df8d8d]">{createError}</div>}
+            <Input className="nova-field text-sm" value={branchTitle} onChange={(event) => setBranchTitle(event.target.value)} placeholder="剧情线名称" />
+            {createSourceNode?.summary && <div className="rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-2 text-xs leading-5 text-[var(--nova-text-muted)]">{createSourceNode.summary}</div>}
+            {createError && <div className="rounded-[var(--nova-radius)] border border-red-500/35 bg-red-500/10 p-2 text-xs text-red-300">{createError}</div>}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => handleCreateDialogOpenChange(false)} disabled={creatingBranch}>取消</Button>
-            <Button className="gap-1.5 bg-[#3a3d44] text-white hover:bg-[#4a4d54]" onClick={submitCreateBranch} disabled={!createSourceNode || creatingBranch}>
+            <Button className="gap-1.5 border border-[var(--nova-border)] bg-[var(--nova-active)] text-[var(--nova-text)] hover:bg-[var(--nova-hover)]" onClick={submitCreateBranch} disabled={!createSourceNode || creatingBranch}>
               <Plus className="h-4 w-4" />
               {creatingBranch ? '创建中...' : '创建并切换'}
             </Button>
@@ -414,7 +414,7 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
 
   return (
     <div
-      className="group relative hidden h-10 min-w-[220px] max-w-[380px] flex-1 cursor-crosshair overflow-hidden rounded-md border border-[#34373d] bg-[#17181b] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_22px_rgba(0,0,0,0.20)] sm:block"
+      className="group relative hidden h-10 min-w-[220px] max-w-[380px] flex-1 cursor-crosshair overflow-hidden rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_22px_rgba(0,0,0,0.20)] sm:block"
       onPointerDown={(event) => {
         draggingRef.current = true
         event.currentTarget.setPointerCapture(event.pointerId)
@@ -433,9 +433,9 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
       aria-label="剧情路线图缩略导航"
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0)_42%),radial-gradient(circle_at_50%_0%,rgba(180,184,192,0.12),transparent_62%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[#f4f4f5]/10" />
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[#17181b] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#17181b] to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/10" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--nova-surface-2)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--nova-surface-2)] to-transparent" />
       <svg className="absolute inset-0 h-full w-full px-2 py-1.5" viewBox={`0 0 ${layout.width} ${layout.height}`} preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <filter id="nova-minimap-soft-glow" x="-20%" y="-80%" width="140%" height="260%">
@@ -465,14 +465,14 @@ function MiniMap({ layout, scrollRef }: { layout: GraphLayout; scrollRef: RefObj
             cx={item.x + layout.metrics.nodeDotX}
             cy={item.y + layout.metrics.nodeCenterY}
             r={item.node.current || item.node.head ? 6 : 4.5}
-            fill={item.node.current ? '#f4f4f5' : item.color}
+            fill={item.node.current ? 'var(--nova-text)' : item.color}
             opacity={item.node.current ? 0.95 : 0.62}
             filter={item.node.current ? 'url(#nova-minimap-soft-glow)' : undefined}
           />
         ))}
       </svg>
       <div
-        className="absolute rounded-[5px] border border-[#d4d7dd]/70 bg-[#d4d7dd]/12 shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_0_18px_rgba(212,215,221,0.16),inset_0_1px_0_rgba(255,255,255,0.22)] transition-all duration-150 group-active:duration-0"
+        className="absolute rounded-[5px] border border-white/45 bg-white/10 shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_0_18px_rgba(212,215,221,0.16),inset_0_1px_0_rgba(255,255,255,0.22)] transition-all duration-150 group-active:duration-0"
         style={{
           left: `${viewport.left}%`,
           top: `${viewport.top}%`,
