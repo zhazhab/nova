@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,16 +16,18 @@ import (
 	"unicode"
 )
 
-const charactersFilePath = "setting/characters.md"
+const loreItemsFilePath = ".nova/lore/items.json"
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
 // CharacterCardImportResult 描述酒馆角色卡导入结果。
 type CharacterCardImportResult struct {
-	Name       string `json:"name"`
-	TargetPath string `json:"target_path"`
-	EntryCount int    `json:"entry_count"`
-	Message    string `json:"message"`
+	Name       string   `json:"name"`
+	TargetPath string   `json:"target_path"`
+	EntryCount int      `json:"entry_count"`
+	ItemCount  int      `json:"item_count"`
+	ItemIDs    []string `json:"item_ids"`
+	Message    string   `json:"message"`
 }
 
 type tavernCard struct {
@@ -102,22 +103,29 @@ type pngTextChunk struct {
 	Text    string
 }
 
-// ImportTavernCharacterCard 将 SillyTavern 酒馆角色卡（PNG 或 JSON）转换为 Markdown，并追加到 setting/characters.md。
+// ImportTavernCharacterCard 将 SillyTavern 酒馆角色卡（PNG 或 JSON）转换为互动资料库条目。
 func (s *Service) ImportTavernCharacterCard(filename string, data []byte) (CharacterCardImportResult, error) {
 	card, err := parseTavernCharacterCard(filename, data)
 	if err != nil {
 		return CharacterCardImportResult{}, err
 	}
-	content := renderTavernCardMarkdown(card, filename, time.Now())
-	if err := s.appendCharactersMarkdown(content); err != nil {
+	ops := buildTavernCardLoreOperations(card, filename, time.Now())
+	applyResult, err := NewLoreStore(s.workspace).ApplyOperations(fmt.Sprintf("导入酒馆角色卡「%s」", card.Name), ops)
+	if err != nil {
 		return CharacterCardImportResult{}, err
 	}
 
+	itemIDs := make([]string, 0, len(applyResult.Created))
+	for _, item := range applyResult.Created {
+		itemIDs = append(itemIDs, item.ID)
+	}
 	result := CharacterCardImportResult{
 		Name:       card.Name,
-		TargetPath: charactersFilePath,
+		TargetPath: loreItemsFilePath,
 		EntryCount: characterBookEntryCount(card.CharacterBook),
-		Message:    fmt.Sprintf("已导入酒馆角色卡「%s」到 %s", card.Name, charactersFilePath),
+		ItemCount:  len(itemIDs),
+		ItemIDs:    itemIDs,
+		Message:    fmt.Sprintf("已导入酒馆角色卡「%s」到互动资料库", card.Name),
 	}
 	return result, nil
 }
@@ -360,12 +368,46 @@ func decodeTavernCardJSON(data []byte) (normalizedTavernCard, error) {
 	return card, nil
 }
 
-func renderTavernCardMarkdown(card normalizedTavernCard, source string, importedAt time.Time) string {
+func buildTavernCardLoreOperations(card normalizedTavernCard, source string, importedAt time.Time) []LoreOperation {
+	ops := []LoreOperation{
+		{
+			Op: "create",
+			Item: LoreItemInput{
+				Type:       "character",
+				Name:       card.Name,
+				Importance: "major",
+				Tags:       tavernCardTags(append([]string{"酒馆角色卡", card.Name}, card.Tags...)...),
+				Content:    renderTavernCardLoreContent(card, source, importedAt),
+			},
+		},
+	}
+	if card.CharacterBook == nil {
+		return ops
+	}
+	for i, entry := range card.CharacterBook.Entries {
+		title := tavernBookEntryTitle(entry, i)
+		content := renderTavernBookEntryLoreContent(card.CharacterBook, entry, source)
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		tags := tavernCardTags("酒馆世界书", card.Name)
+		tags = append(tags, entry.Keys...)
+		ops = append(ops, LoreOperation{
+			Op: "create",
+			Item: LoreItemInput{
+				Type:       "world",
+				Name:       title,
+				Importance: "important",
+				Tags:       tags,
+				Content:    content,
+			},
+		})
+	}
+	return ops
+}
+
+func renderTavernCardLoreContent(card normalizedTavernCard, source string, importedAt time.Time) string {
 	var sb strings.Builder
-	sb.WriteString("<!-- tavern-card-import:start -->\n")
-	sb.WriteString("## 酒馆角色卡：")
-	sb.WriteString(card.Name)
-	sb.WriteString("\n\n")
 	sb.WriteString("- 来源文件：")
 	sb.WriteString(source)
 	sb.WriteString("\n")
@@ -408,10 +450,17 @@ func renderTavernCardMarkdown(card normalizedTavernCard, source string, imported
 	}
 
 	if card.CharacterBook != nil {
-		writeCharacterBookMarkdown(&sb, card.CharacterBook)
+		sb.WriteString("### 附带世界书\n\n")
+		if strings.TrimSpace(card.CharacterBook.Name) != "" {
+			sb.WriteString("- 世界书名称：")
+			sb.WriteString(strings.TrimSpace(card.CharacterBook.Name))
+			sb.WriteString("\n")
+		}
+		sb.WriteString("- 条目数：")
+		sb.WriteString(strconv.Itoa(characterBookEntryCount(card.CharacterBook)))
+		sb.WriteString("\n\n")
 	}
-	sb.WriteString("<!-- tavern-card-import:end -->\n")
-	return sb.String()
+	return strings.TrimSpace(sb.String())
 }
 
 func writeMarkdownSection(sb *strings.Builder, title, content string) {
@@ -426,76 +475,61 @@ func writeMarkdownSection(sb *strings.Builder, title, content string) {
 	sb.WriteString("\n\n")
 }
 
-func writeCharacterBookMarkdown(sb *strings.Builder, book *tavernCharacterBook) {
-	if book == nil || len(book.Entries) == 0 {
-		return
+func renderTavernBookEntryLoreContent(book *tavernCharacterBook, entry tavernBookEntry, source string) string {
+	content := normalizeCardText(entry.Content)
+	if content == "" && len(entry.Keys) == 0 && len(entry.SecondaryKeys) == 0 && strings.TrimSpace(entry.Comment) == "" {
+		return ""
 	}
-	sb.WriteString("### 世界书 / 角色条目\n\n")
-	if strings.TrimSpace(book.Name) != "" {
+	var sb strings.Builder
+	sb.WriteString("- 来源文件：")
+	sb.WriteString(source)
+	sb.WriteString("\n")
+	if book != nil && strings.TrimSpace(book.Name) != "" {
 		sb.WriteString("- 世界书名称：")
 		sb.WriteString(strings.TrimSpace(book.Name))
-		sb.WriteString("\n\n")
+		sb.WriteString("\n")
 	}
-	for i, entry := range book.Entries {
-		if entry.Enabled != nil && !*entry.Enabled && strings.TrimSpace(entry.Content) == "" {
-			continue
-		}
-		title := firstNonEmpty(entry.Comment, strings.Join(entry.Keys, "、"), fmt.Sprintf("条目 %d", i+1))
-		sb.WriteString("#### ")
-		sb.WriteString(title)
-		sb.WriteString("\n\n")
-		if len(entry.Keys) > 0 {
-			sb.WriteString("- 关键词：")
-			sb.WriteString(strings.Join(entry.Keys, "、"))
-			sb.WriteString("\n")
-		}
-		if len(entry.SecondaryKeys) > 0 {
-			sb.WriteString("- 次级关键词：")
-			sb.WriteString(strings.Join(entry.SecondaryKeys, "、"))
-			sb.WriteString("\n")
-		}
-		sb.WriteString("- 启用：")
-		if entry.Enabled == nil {
-			sb.WriteString("未声明")
-		} else if *entry.Enabled {
-			sb.WriteString("是")
-		} else {
-			sb.WriteString("否")
-		}
-		sb.WriteString("\n\n")
-		content := normalizeCardText(entry.Content)
-		if content != "" {
-			sb.WriteString(content)
-			sb.WriteString("\n\n")
-		}
+	if len(entry.Keys) > 0 {
+		sb.WriteString("- 关键词：")
+		sb.WriteString(strings.Join(entry.Keys, "、"))
+		sb.WriteString("\n")
 	}
+	if len(entry.SecondaryKeys) > 0 {
+		sb.WriteString("- 次级关键词：")
+		sb.WriteString(strings.Join(entry.SecondaryKeys, "、"))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("- 启用：")
+	if entry.Enabled == nil {
+		sb.WriteString("未声明")
+	} else if *entry.Enabled {
+		sb.WriteString("是")
+	} else {
+		sb.WriteString("否")
+	}
+	sb.WriteString("\n\n")
+	if content != "" {
+		sb.WriteString(content)
+	}
+	return strings.TrimSpace(sb.String())
 }
 
-func (s *Service) appendCharactersMarkdown(content string) error {
-	absPath, err := SafePath(s.workspace, charactersFilePath)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		return err
-	}
-	existing, err := os.ReadFile(absPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
+func tavernBookEntryTitle(entry tavernBookEntry, index int) string {
+	return firstNonEmpty(entry.Comment, strings.Join(entry.Keys, "、"), fmt.Sprintf("条目 %d", index+1))
+}
 
-	var next strings.Builder
-	if len(bytes.TrimSpace(existing)) == 0 {
-		next.WriteString("# 角色卡片\n\n")
-	} else {
-		next.Write(existing)
-		if !bytes.HasSuffix(existing, []byte("\n")) {
-			next.WriteString("\n")
+func tavernCardTags(values ...string) []string {
+	tags := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
 		}
-		next.WriteString("\n")
+		seen[value] = true
+		tags = append(tags, value)
 	}
-	next.WriteString(content)
-	return os.WriteFile(absPath, []byte(next.String()), 0o644)
+	return tags
 }
 
 func normalizeCardText(text string) string {

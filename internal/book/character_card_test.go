@@ -51,7 +51,7 @@ func TestParseTavernCharacterCardPNGTextChunk(t *testing.T) {
 	}
 }
 
-func TestServiceImportTavernCharacterCardAppendsCharactersMD(t *testing.T) {
+func TestServiceImportTavernCharacterCardCreatesLoreItems(t *testing.T) {
 	workspace := t.TempDir()
 	service := NewService(workspace)
 
@@ -70,19 +70,25 @@ func TestServiceImportTavernCharacterCardAppendsCharactersMD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("导入角色卡失败: %v", err)
 	}
-	if result.TargetPath != charactersFilePath || result.EntryCount != 1 {
+	if result.TargetPath != loreItemsFilePath || result.EntryCount != 1 || result.ItemCount != 2 {
 		t.Fatalf("导入结果不符合预期: %#v", result)
 	}
 
-	data, err := os.ReadFile(filepath.Join(workspace, charactersFilePath))
+	items, err := NewLoreStore(workspace).List()
 	if err != nil {
-		t.Fatalf("读取 characters.md 失败: %v", err)
+		t.Fatalf("读取资料库失败: %v", err)
 	}
-	content := string(data)
-	for _, want := range []string{"# 角色卡片", "## 酒馆角色卡：柳云", "负责整理情报", "知道城主府暗线"} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("导入内容缺少 %q:\n%s", want, content)
+	if len(items) != 2 {
+		t.Fatalf("资料库条目数不符合预期: %#v", items)
+	}
+	combined := items[0].Content + "\n" + items[1].Content
+	for _, want := range []string{"负责整理情报", "知道城主府暗线"} {
+		if !strings.Contains(combined, want) {
+			t.Fatalf("导入内容缺少 %q:\n%s", want, combined)
 		}
+	}
+	if items[0].Type != "character" || items[0].Name != "柳云" {
+		t.Fatalf("角色资料条目不符合预期: %#v", items[0])
 	}
 }
 

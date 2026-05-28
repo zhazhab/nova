@@ -146,9 +146,12 @@ func TestInteractiveConversationBuildsHistoryAndPersistsAssistantToStory(t *test
 }
 
 func TestParseInteractiveAssistantOutput(t *testing.T) {
-	narrative, ops, err := parseInteractiveAssistantOutput(`<NARRATIVE>
+	narrative, ops, hotState, err := parseInteractiveAssistantOutput(`<NARRATIVE>
 门后传来低沉的风声。
 </NARRATIVE>
+<HOT_STATE>
+{"choices":["我贴近门缝听里面的动静。"]}
+</HOT_STATE>
 <STATE_DELTA>
 {"ops":[{"op":"set","path":"on_stage","value":["林川"]}]}
 </STATE_DELTA>`)
@@ -158,23 +161,29 @@ func TestParseInteractiveAssistantOutput(t *testing.T) {
 	if narrative != "门后传来低沉的风声。" || len(ops) != 1 || ops[0].Path != "on_stage" {
 		t.Fatalf("unexpected parsed output narrative=%q ops=%#v", narrative, ops)
 	}
+	if hotState == nil || len(hotState.Choices) != 1 || hotState.Choices[0] != "我贴近门缝听里面的动静。" {
+		t.Fatalf("unexpected hot state: %#v", hotState)
+	}
 
-	narrative, ops, err = parseInteractiveAssistantOutput("<NARRATIVE>只有正文。</NARRATIVE>")
+	narrative, ops, hotState, err = parseInteractiveAssistantOutput("<NARRATIVE>只有正文。</NARRATIVE>")
 	if err != nil || narrative != "只有正文。" || len(ops) != 0 {
 		t.Fatalf("expected missing state delta to preserve narrative, narrative=%q ops=%#v err=%v", narrative, ops, err)
 	}
+	if hotState != nil {
+		t.Fatalf("unexpected hot state: %#v", hotState)
+	}
 
-	narrative, ops, err = parseInteractiveAssistantOutput("旧格式正文\n<STATE_DELTA>{\"ops\":[]}</STATE_DELTA>")
+	narrative, ops, _, err = parseInteractiveAssistantOutput("旧格式正文\n<STATE_DELTA>{\"ops\":[]}</STATE_DELTA>")
 	if err != nil || narrative != "旧格式正文" || len(ops) != 0 {
 		t.Fatalf("expected empty ops to fall back to async state, narrative=%q ops=%#v err=%v", narrative, ops, err)
 	}
 
-	narrative, ops, err = parseInteractiveAssistantOutput("旧格式正文\n<STATE_DELTA>{bad json}</STATE_DELTA>")
+	narrative, ops, _, err = parseInteractiveAssistantOutput("旧格式正文\n<STATE_DELTA>{bad json}</STATE_DELTA>")
 	if err != nil || narrative != "旧格式正文" || len(ops) != 0 {
 		t.Fatalf("expected invalid state to fall back to async state, narrative=%q ops=%#v err=%v", narrative, ops, err)
 	}
 
-	_, _, err = parseInteractiveAssistantOutput("<STATE_DELTA>{\"ops\":[]}</STATE_DELTA>")
+	_, _, _, err = parseInteractiveAssistantOutput("<STATE_DELTA>{\"ops\":[]}</STATE_DELTA>")
 	if err == nil {
 		t.Fatalf("expected empty narrative error")
 	}

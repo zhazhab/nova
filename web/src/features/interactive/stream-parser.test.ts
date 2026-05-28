@@ -14,6 +14,17 @@ describe('createInteractiveNarrativeFilter', () => {
     expect(visible).toBe('\n火光照亮了墙上的新线索。\n')
   })
 
+  it('hides hot state choices after narrative', () => {
+    const filter = createInteractiveNarrativeFilter()
+    const visible = [
+      filter.push('<NARRATIVE>门后传来风声。</NARRATIVE><HOT'),
+      filter.push('_STATE>{"choices":["我贴近门缝听里面的动静。"]}</HOT_STATE>'),
+      filter.flush(),
+    ].join('')
+
+    expect(visible).toBe('门后传来风声。')
+  })
+
   it('handles tags split across chunks', () => {
     const filter = createInteractiveNarrativeFilter()
     const visible = [

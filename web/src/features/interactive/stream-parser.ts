@@ -1,8 +1,9 @@
 const NARRATIVE_START = '<NARRATIVE>'
 const NARRATIVE_END = '</NARRATIVE>'
+const HOT_STATE_START = '<HOT_STATE>'
 const STATE_DELTA_START = '<STATE_DELTA>'
 
-const TAGS = [NARRATIVE_START, NARRATIVE_END, STATE_DELTA_START]
+const TAGS = [NARRATIVE_START, NARRATIVE_END, HOT_STATE_START, STATE_DELTA_START]
 
 export function createInteractiveNarrativeFilter() {
   let buffer = ''
@@ -23,7 +24,7 @@ export function createInteractiveNarrativeFilter() {
   function drain(flushAll: boolean): string {
     let output = ''
     while (buffer) {
-      if (buffer.startsWith(STATE_DELTA_START)) {
+      if (buffer.startsWith(HOT_STATE_START) || buffer.startsWith(STATE_DELTA_START)) {
         stopped = true
         buffer = ''
         return output

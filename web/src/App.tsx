@@ -20,6 +20,7 @@ import { useChat } from '@/hooks/useChat'
 import { useWorkspaceHotkeys } from '@/hooks/use-workspace-hotkeys'
 import type { FileNode } from '@/hooks/useWorkspace'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { useInteractiveStore } from '@/features/interactive/stores/interactive-store'
 import type { ChapterSummary, WorkspaceSummary } from '@/lib/api'
 import {
   Bot,
@@ -409,9 +410,9 @@ function App() {
     try {
       const result = await importCharacterCard(file)
       toast.success(result.message || `已导入酒馆角色卡「${result.name}」`)
-      await refresh()
-      setSidebarView('files')
-      await handleSelectFile(result.target_path)
+      window.dispatchEvent(new CustomEvent('nova:lore-updated', { detail: result }))
+      setMode('interactive')
+      useInteractiveStore.getState().setSubmode('lore')
       notifyGitChange()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '导入酒馆角色卡失败')
@@ -420,7 +421,7 @@ function App() {
         characterCardInputRef.current.value = ''
       }
     }
-  }, [handleSelectFile, notifyGitChange, refresh])
+  }, [notifyGitChange, setMode])
 
   /** 激活某个文件 tab 并加载内容。 */
   const handleActivateTab = useCallback((tab: Tab) => {
@@ -532,6 +533,21 @@ function App() {
       >
         <BookOpen className="h-4 w-4" />
       </TooltipIconButton>
+      <TooltipIconButton
+        label="导入酒馆角色卡"
+        onClick={() => characterCardInputRef.current?.click()}
+        className="nova-icon-button"
+        disabled={!workspace}
+      >
+        <Upload className="h-4 w-4" />
+      </TooltipIconButton>
+      <input
+        ref={characterCardInputRef}
+        type="file"
+        accept=".png,.json,application/json,image/png"
+        className="hidden"
+        onChange={(e) => void handleCharacterCardSelected(e.target.files?.[0])}
+      />
       {mode === 'ide' ? ideActivityButtons : null}
       <TooltipIconButton
         label="设置"
@@ -562,23 +578,6 @@ function App() {
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
-            <button
-              type="button"
-              onClick={() => characterCardInputRef.current?.click()}
-              className="nova-nav-item rounded p-1"
-              title="导入酒馆角色卡"
-              aria-label="导入酒馆角色卡"
-              disabled={!workspace}
-            >
-              <Upload className="h-3.5 w-3.5" />
-            </button>
-            <input
-              ref={characterCardInputRef}
-              type="file"
-              accept=".png,.json,application/json,image/png"
-              className="hidden"
-              onChange={(e) => void handleCharacterCardSelected(e.target.files?.[0])}
-            />
             <button
               type="button"
               onClick={() => setProjectVisible(false)}

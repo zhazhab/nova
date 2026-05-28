@@ -53,6 +53,7 @@ type AppendTurnWithStateRequest struct {
 	Narrative string    `json:"narrative"`
 	Thinking  string    `json:"thinking,omitempty"`
 	Ops       []StateOp `json:"ops,omitempty"`
+	HotState  *HotState `json:"hot_state,omitempty"`
 }
 
 type AppendStateDeltaRequest struct {
@@ -135,6 +136,7 @@ type TurnEvent struct {
 	Narrative   string          `json:"narrative"`
 	Thinking    string          `json:"thinking,omitempty"`
 	StateDelta  *StateDelta     `json:"state_delta,omitempty"`
+	HotState    *HotState       `json:"hot_state,omitempty"`
 	StateStatus string          `json:"state_status,omitempty"`
 	StateError  string          `json:"state_error,omitempty"`
 	Alts        []TurnAlt       `json:"alts,omitempty"`
@@ -149,6 +151,10 @@ type TurnAlt struct {
 
 type StateDelta struct {
 	Ops []StateOp `json:"ops"`
+}
+
+type HotState struct {
+	Choices []string `json:"choices"`
 }
 
 type StateDeltaEvent struct {
@@ -429,6 +435,7 @@ func (s *Store) AppendTurnWithState(storyID string, req AppendTurnWithStateReque
 		User:      req.User,
 		Narrative: req.Narrative,
 		Thinking:  strings.TrimSpace(req.Thinking),
+		HotState:  normalizeHotState(req.HotState),
 		Flags:     map[string]bool{"pinned": false, "locked": false},
 	}
 	branch.Head = turn.ID
@@ -780,6 +787,29 @@ func initialStoryState() map[string]any {
 		"threads":      []any{},
 		"action_space": []any{},
 	}
+}
+
+func normalizeHotState(hot *HotState) *HotState {
+	if hot == nil {
+		return nil
+	}
+	choices := make([]string, 0, len(hot.Choices))
+	seen := map[string]bool{}
+	for _, choice := range hot.Choices {
+		choice = strings.TrimSpace(choice)
+		if choice == "" || seen[choice] {
+			continue
+		}
+		choices = append(choices, choice)
+		seen[choice] = true
+		if len(choices) >= 5 {
+			break
+		}
+	}
+	if len(choices) == 0 {
+		return nil
+	}
+	return &HotState{Choices: choices}
 }
 
 func eventsByID(lines []map[string]any) map[string]map[string]any {

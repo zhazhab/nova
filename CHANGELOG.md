@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- WebUI/后端互动模式：新增每轮主 Agent 同步输出的 Hot State 行动候选，故事舞台输入框上方会立即展示可点击填入的下一步行动，正式场景记忆仍由后台 State Agent 异步整理
 - 后端资料库：新增资料库编辑 Agent，按用户中文指令生成结构化 create/update/delete 操作并批量应用到 `.nova/lore/items.json`；新增资料库非 Git 版本快照，资料创建、更新、删除、Agent 批量编辑和版本恢复前都会写入 `.nova/lore/versions/`，并提供版本列表、手动快照和恢复接口
 - WebUI：互动资料库面板新增资料库 Agent 指令栏与资料库版本列表，支持一键批量整理资料、查看变更摘要、手动创建版本和恢复历史版本
 - WebUI/后端资料库：资料库新增固定 Agent 统一入口，指令栏支持通过 `@` 引用具体资料条目；后端会把引用条目作为重点上下文传给资料库编辑 Agent，未引用时仍由 Agent 按用户指令自行判断全库需要修改的条目
@@ -19,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - 后端 Agent：增强每轮对话上下文组成日志，按来源记录会话历史、本轮请求、文件引用、风格参考、场景化风格规则、编辑器选区和上下文边界，并输出各段标题/规则名与短 preview，便于排查实际注入内容
 - 后端互动模式：通用 `[agent-run]` 日志新增互动会话上下文来源摘要，明确列出讲述者注入规则、资料库、状态快照和历史回合，避免第 0 条上下文 preview 截断导致误判规则未注入
 - 后端/WebUI 互动模式：讲述者注入位置收敛为「系统提示 / 本轮上下文 / 状态记忆」三类真实生效位置，随机事件率会随本轮上下文影响剧情扰动强度，内置讲述者规则同步升级为更强的剧情主持倾向
-- WebUI：支持导入 SillyTavern 酒馆角色卡，PNG `chara` 元数据与 JSON 角色卡均可上传，后端会转换为中文 Markdown 并追加到 `setting/characters.md`，导入后自动刷新并打开角色卡片文件
+- WebUI/后端资料库：支持导入 SillyTavern 酒馆 v2 角色卡，PNG `chara` 元数据与 JSON 角色卡均可上传；后端会按互动资料库 Lore Item 格式写入 `.nova/lore/items.json`，角色主体导入为角色资料，角色卡附带世界书条目导入为资料库世界观条目；入口从 IDE 目录栏移动到与书籍管理并列的全局活动栏
 - 互动模式：新增“故事主持人”式回合裁定提示与状态空间，Agent 每轮隐式识别用户行动、绑定相关角色和世界规则、裁定后果、更新状态并制造新的可行动空间；`STATE_DELTA` 支持 `scene`、`inventory`、`resources`、`world_flags`、`rules`、`threads`、`action_space` 等路径
 - 互动模式：新增工作区级 TOML 配置 `interactive_reply_target_chars`，默认 1200 个中文字；新增可选 `interactive_max_tokens`，默认不限制以优先避免非自然截断；设置页可在「当前工作区 / 互动模式」中调整，下一轮互动对话立即生效
 - 互动模式：新增删除空剧情线能力，后端提供分支删除接口并保护主线和已有独立剧情的分支不被删除

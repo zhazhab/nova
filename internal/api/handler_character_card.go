@@ -11,7 +11,7 @@ import (
 
 const maxCharacterCardUploadBytes int64 = 32 * 1024 * 1024
 
-// handleWorkspaceImportCharacterCard POST /api/workspace/import-character-card — 导入酒馆角色卡 PNG/JSON。
+// handleWorkspaceImportCharacterCard POST /api/workspace/import-character-card — 导入酒馆角色卡 PNG/JSON 到互动资料库。
 func (s *Server) handleWorkspaceImportCharacterCard(ctx context.Context, c *app.RequestContext) {
 	if !s.requireWorkspace(c) {
 		return
@@ -50,6 +50,6 @@ func (s *Server) handleWorkspaceImportCharacterCard(ctx context.Context, c *app.
 		writeError(c, consts.StatusBadRequest, "导入酒馆角色卡失败: "+err.Error())
 		return
 	}
-	log.Printf("[api] 导入酒馆角色卡完成 name=%q target=%q entries=%d", result.Name, result.TargetPath, result.EntryCount)
+	log.Printf("[api] 导入酒馆角色卡完成 name=%q target=%q entries=%d items=%d", result.Name, result.TargetPath, result.EntryCount, result.ItemCount)
 	writeJSON(c, consts.StatusOK, result)
 }

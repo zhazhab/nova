@@ -79,8 +79,10 @@ func BuildInteractiveStorySystemInstruction(in InteractiveStorySystemInstruction
 	sb.WriteString("- 可以在正文结尾自然露出 2 到 4 个可选行动方向，但不要写成游戏 UI 菜单，也不要替用户决定下一步选择。\n\n")
 	fmt.Fprintf(&sb, "- 本轮回复目标长度约为 %d 个中文字以内；你需要主动收束内容，优先写聚焦、有推进、可继续互动的一回合，不要依赖输出上限截断。\n\n", normalizeInteractiveReplyTargetChars(in.ReplyTargetChars))
 	sb.WriteString("## 输出协议\n")
-	sb.WriteString("只输出本回合展示在故事舞台上的正文；不要输出计划、解释、工具说明、Markdown 标题或状态 JSON。\n")
-	sb.WriteString("可以使用 <NARRATIVE>...</NARRATIVE> 包裹正文，但不要输出 <STATE_DELTA>。\n")
+	sb.WriteString("必须按顺序输出 <NARRATIVE>...</NARRATIVE> 和 <HOT_STATE>{\"choices\":[...]}</HOT_STATE>。\n")
+	sb.WriteString("- <NARRATIVE> 内只写本回合展示在故事舞台上的正文；不要输出计划、解释、工具说明、Markdown 标题或状态 JSON。\n")
+	sb.WriteString("- <HOT_STATE> 内只输出 JSON 对象，choices 是 2 到 5 条中文行动句字符串，可直接作为用户下一轮输入；不要包含 id、label、note 或对象。\n")
+	sb.WriteString("- 不要输出 <STATE_DELTA>，正式状态由后台状态 Agent 异步生成。\n")
 	if ws := strings.TrimSpace(in.Workspace); ws != "" {
 		sb.WriteString("\n## 作品工作目录\n")
 		sb.WriteString(ws)
@@ -94,8 +96,10 @@ func InteractiveStoryContext(in InteractiveStoryPromptInput) string {
 	sb.WriteString("[互动故事模式]\n")
 	sb.WriteString("你正在为 Nova 的互动 story 子模式生成下一回合内容。输出会直接流式显示到故事舞台，并在结束后写入 interactive/story/story-{id}.jsonl。\n\n")
 	sb.WriteString("## 输出协议\n")
-	sb.WriteString("只输出本回合面向读者展示的故事正文；不要输出额外解释、计划、工具说明、Markdown 标题或状态 JSON。\n")
-	sb.WriteString("可以使用 <NARRATIVE>...</NARRATIVE> 包裹正文，但不要输出 <STATE_DELTA>。\n\n")
+	sb.WriteString("必须按顺序输出 <NARRATIVE>...</NARRATIVE> 和 <HOT_STATE>{\"choices\":[...]}</HOT_STATE>。\n")
+	sb.WriteString("- <NARRATIVE> 内只写本回合面向读者展示的故事正文；不要输出额外解释、计划、工具说明、Markdown 标题或状态 JSON。\n")
+	sb.WriteString("- <HOT_STATE> 内只输出 JSON 对象，choices 是 2 到 5 条中文行动句字符串，可直接作为用户下一轮输入；不要包含 id、label、note 或对象。\n")
+	sb.WriteString("- 不要输出 <STATE_DELTA>，正式状态由后台状态 Agent 异步生成。\n\n")
 	sb.WriteString("## 回合裁定循环（必须隐式执行，不要输出分析）\n")
 	sb.WriteString("1. 识别用户行动：区分行动、对白、观察、等待、追问、计划、元指令；提取目标、手段、风险、涉及对象和隐含意图。\n")
 	sb.WriteString("2. 判断相关上下文：只调动本轮相关的在场角色、角色状态、关系、地点、时间、世界规则、未解决线索和近期事件。\n")
@@ -157,7 +161,7 @@ func InteractiveStoryTurnInstruction(message, turnContext string, randomEventRat
 本回合必须隐式完成：识别用户行动、判断相关角色和世界规则、裁定后果、制造新的可行动空间、保持角色和世界一致性；不要输出这些分析过程。
 本回合要让主角作为故事人物正常与环境、物品和其他角色互动，写出行动带来的反馈、代价、发现、阻碍或机会；不要每发生一个小动作就停下等待用户。
 其他角色应依据性格、目标、关系和当前局势主动反应。结尾请停在有意义的选择点、悬念点或决策点，让用户能决定下一步，但不要替用户做出重大选择。
-不要输出状态 JSON。`, strings.TrimSpace(message), turnBlock)
+输出结尾必须追加 <HOT_STATE>{"choices":[...字符串...]}</HOT_STATE>，choices 写 2 到 5 条用户可直接采用或改写的下一步行动。不要输出 <STATE_DELTA>。`, strings.TrimSpace(message), turnBlock)
 }
 
 func BuildInteractiveStateSystemInstruction() string {

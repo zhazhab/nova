@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { GitBranch, MessageSquareText, Send, Square } from 'lucide-react'
+import { Compass, GitBranch, MessageSquareText, Send, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -30,6 +30,7 @@ const stageAbortControllers = new Map<string, AbortController>()
 
 export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: StoryStageProps) {
   const [input, setInput] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const snapshotKey = `${storyId || 'none'}:${snapshot?.branch_id || branchId || 'main'}:${snapshot?.turns?.[snapshot.turns.length - 1]?.id || 'empty'}`
   const stageKey = `${workspace || 'current'}:${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
   const { storyStageRuns, setStoryStageRun, clearStoryStageRun } = useInteractiveStore()
@@ -112,6 +113,10 @@ export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: S
   const messages = useMemo(() => [...historyMessages, ...liveMessages], [historyMessages, liveMessages])
   const scrollResetKey = `${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
   const title = pickSceneTitle(snapshot, branchId)
+  const hotChoices = useMemo(() => {
+    const choices = snapshot?.current_turn?.hot_state?.choices || []
+    return choices.map((choice) => choice.trim()).filter(Boolean).slice(0, 5)
+  }, [snapshot?.current_turn?.hot_state?.choices])
 
   const send = async () => {
     const message = input.trim()
@@ -249,8 +254,35 @@ export function StoryStage({ workspace, storyId, branchId, snapshot, onDone }: S
       </div>
       <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 bg-gradient-to-t from-[var(--nova-surface-2)] via-[var(--nova-surface-2)] to-transparent pt-8">
         <div className="pointer-events-auto rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface)] p-3 shadow-[var(--nova-shadow)] backdrop-blur">
+          {!streaming && hotChoices.length > 0 ? (
+            <div className="mb-3 border-b border-[var(--nova-border)] pb-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-[var(--nova-text-faint)]">
+                <Compass className="h-3.5 w-3.5" />
+                可行动空间
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {hotChoices.map((choice, index) => (
+                  <button
+                    key={`${index}-${choice}`}
+                    type="button"
+                    className="max-w-full rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-2.5 py-1.5 text-left text-xs leading-5 text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)]"
+                    onClick={() => {
+                      setInput(choice)
+                      window.requestAnimationFrame(() => {
+                        inputRef.current?.focus()
+                        inputRef.current?.setSelectionRange(choice.length, choice.length)
+                      })
+                    }}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="flex items-center gap-3">
             <Textarea
+              ref={inputRef}
               className="nova-field h-14 min-h-14 flex-1 resize-none text-sm leading-6 placeholder:text-[var(--nova-text-faint)] focus-visible:ring-1 focus-visible:ring-[var(--nova-border)]/35"
               style={stageTextStyle}
               value={input}

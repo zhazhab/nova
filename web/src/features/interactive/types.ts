@@ -65,6 +65,7 @@ export interface TurnEvent {
   narrative: string
   thinking?: string
   state_delta?: StateDelta
+  hot_state?: HotState
   state_status?: 'pending' | 'ready' | 'failed'
   state_error?: string
 }
@@ -77,6 +78,10 @@ export interface StateOp {
   op: string
   path: string
   value?: unknown
+}
+
+export interface HotState {
+  choices: string[]
 }
 
 export interface Snapshot {

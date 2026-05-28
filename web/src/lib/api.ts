@@ -77,6 +77,8 @@ export interface CharacterCardImportResult {
   name: string
   target_path: string
   entry_count: number
+  item_count: number
+  item_ids: string[]
   message: string
 }
 
@@ -499,7 +501,7 @@ export async function moveWorkspaceItem(req: CopyMoveRequest): Promise<FileOpera
   })
 }
 
-/** 导入酒馆角色卡 PNG/JSON 到 setting/characters.md */
+/** 导入酒馆角色卡 PNG/JSON 到互动资料库 */
 export async function importCharacterCard(file: File): Promise<CharacterCardImportResult> {
   const form = new FormData()
   form.append('file', file)

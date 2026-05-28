@@ -72,6 +72,9 @@ func (c *interactiveConversation) PrepareMessages(originalMessage, agentMessage 
 		LoreItems:         loreItems,
 		SnapshotStateJSON: string(stateJSON),
 	})
+	if choices := pendingHotStateChoices(storyCtx.Snapshot); len(choices) > 0 {
+		contextMessage += "\n\n" + formatTemporaryActionSpace(choices)
+	}
 	history := make([]*schema.Message, 0, len(storyCtx.Snapshot.Turns)*2+2)
 	history = append(history, schema.UserMessage(contextMessage))
 	for _, turn := range storyCtx.Snapshot.Turns {
@@ -122,18 +125,19 @@ func (c *interactiveConversation) AppendAssistantWithThinking(content, thinking 
 		return fmt.Errorf("互动故事不存在")
 	}
 	log.Printf("[interactive-agent] parse assistant output content story_id=%s branch_id=%s content=%q", c.storyID, c.branchID, content)
-	narrative, ops, parseErr := parseInteractiveAssistantOutput(content)
+	narrative, ops, hotState, parseErr := parseInteractiveAssistantOutput(content)
 	if parseErr != nil {
 		log.Printf("[interactive-agent] parse assistant output failed story_id=%s branch_id=%s err=%v content=%q", c.storyID, c.branchID, parseErr, content)
 		return parseErr
 	}
-	log.Printf("[interactive-agent] parse assistant output result story_id=%s branch_id=%s narrative=%q ops=%s", c.storyID, c.branchID, narrative, interactiveStateOpsLogJSON(ops))
+	log.Printf("[interactive-agent] parse assistant output result story_id=%s branch_id=%s narrative=%q hot_state_choices=%d ops=%s", c.storyID, c.branchID, narrative, hotStateChoiceCount(hotState), interactiveStateOpsLogJSON(ops))
 	turn, _, err := c.store.AppendTurnWithState(c.storyID, interactive.AppendTurnWithStateRequest{
 		BranchID:  c.branchID,
 		User:      c.user,
 		Narrative: narrative,
 		Thinking:  thinking,
 		Ops:       ops,
+		HotState:  hotState,
 	})
 	if err == nil {
 		c.mu.Lock()
@@ -267,6 +271,34 @@ func interactiveStateOpsLogJSON(ops []interactive.StateOp) string {
 		return fmt.Sprintf("<marshal error: %v>", err)
 	}
 	return string(data)
+}
+
+func hotStateChoiceCount(hot *interactive.HotState) int {
+	if hot == nil {
+		return 0
+	}
+	return len(hot.Choices)
+}
+
+func pendingHotStateChoices(snapshot interactive.Snapshot) []string {
+	if snapshot.CurrentTurn == nil || snapshot.CurrentTurn.StateStatus != "pending" || snapshot.CurrentTurn.HotState == nil {
+		return nil
+	}
+	return snapshot.CurrentTurn.HotState.Choices
+}
+
+func formatTemporaryActionSpace(choices []string) string {
+	var sb strings.Builder
+	sb.WriteString("## 临时行动空间\n")
+	sb.WriteString("上一回合的正式状态仍在同步中，以下是主 Agent 快速生成的可行动候选；它们只用于辅助理解下一步，不替代用户本轮明确输入。\n")
+	for i, choice := range choices {
+		choice = strings.TrimSpace(choice)
+		if choice == "" {
+			continue
+		}
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, choice)
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 type interactiveContextSource struct {

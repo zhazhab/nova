@@ -193,6 +193,16 @@ export function SettingPanel({ mode, tellers: externalTellers = [], onTellersCha
     setVersions(data)
   }
 
+  useEffect(() => {
+    const onLoreUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ item_ids?: string[] }>).detail
+      void refreshItems(detail?.item_ids?.[0])
+      void refreshVersions()
+    }
+    window.addEventListener('nova:lore-updated', onLoreUpdated)
+    return () => window.removeEventListener('nova:lore-updated', onLoreUpdated)
+  }, [])
+
   const refreshTellers = async (nextActiveId?: string) => {
     const data = await getInteractiveTellers()
     setTellers(data)
