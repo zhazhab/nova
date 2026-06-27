@@ -73,6 +73,7 @@ describe('useAgentEventStream', () => {
           sse_hidden_fields: ['content'],
           sse_hidden_reason: 'novel_chapter_body',
           sse_display_notice: 'chapter_body_hidden',
+          sse_generated_chars: 3,
         }],
       ]))
     })
@@ -82,6 +83,7 @@ describe('useAgentEventStream', () => {
       sse_hidden_fields: ['content'],
       sse_hidden_reason: 'novel_chapter_body',
       sse_display_notice: 'chapter_body_hidden',
+      sse_generated_chars: 3,
     })
   })
 

@@ -11,3 +11,9 @@ type SSEEventHandler func(agent.Event) error
 type SSEEventMiddleware interface {
 	Next(SSEEventHandler) SSEEventHandler
 }
+
+// SSEEventMiddlewareChainOptions controls which optional outbound SSE
+// middlewares are installed for a stream.
+type SSEEventMiddlewareChainOptions struct {
+	HideChapterBodyLiveOutput bool
+}

@@ -26,6 +26,7 @@ func TestSSEWriteFileChapterBodyMiddlewareShowsOnlyPathForToolCall(t *testing.T)
 		t.Fatalf("display args should not include body or placeholder, got %q", gotArgs)
 	}
 	assertChapterBodyHiddenNotice(t, got.Data)
+	assertGeneratedChars(t, got.Data, len([]rune("第一行\n第二行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareShowsOnlyPathForAbsoluteNovaChapterToolCall(t *testing.T) {
@@ -49,6 +50,7 @@ func TestSSEWriteFileChapterBodyMiddlewareShowsOnlyPathForAbsoluteNovaChapterToo
 		t.Fatalf("display args should not include body or placeholder, got %q", gotArgs)
 	}
 	assertChapterBodyHiddenNotice(t, got.Data)
+	assertGeneratedChars(t, got.Data, len([]rune("第一行\n第二行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareShowsOnlyPathForPastedDetailArgs(t *testing.T) {
@@ -72,6 +74,7 @@ func TestSSEWriteFileChapterBodyMiddlewareShowsOnlyPathForPastedDetailArgs(t *te
 		t.Fatalf("display args should not include body or placeholder, got %q", gotArgs)
 	}
 	assertChapterBodyHiddenNotice(t, got.Data)
+	assertGeneratedChars(t, got.Data, len([]rune("第一行\n第二行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareUsesTargetWhenArgsCannotRevealPath(t *testing.T) {
@@ -96,6 +99,7 @@ func TestSSEWriteFileChapterBodyMiddlewareUsesTargetWhenArgsCannotRevealPath(t *
 		t.Fatalf("display args should not include body or placeholder, got %q", gotArgs)
 	}
 	assertChapterBodyHiddenNotice(t, got.Data)
+	assertGeneratedChars(t, got.Data, len([]rune("第一行\n第二行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareHoldsUnknownToolCallArgs(t *testing.T) {
@@ -129,7 +133,7 @@ func TestSSEWriteFileChapterBodyMiddlewareProjectsToolTargetToArgsDelta(t *testi
 		"name":       "write_file",
 		"target":     path,
 	}})
-	mustSuppressSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
+	progress := mustForwardSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
 		"agent_kind": agent.AgentKindIDE,
 		"id":         "call-1",
 		"name":       "write_file",
@@ -145,6 +149,11 @@ func TestSSEWriteFileChapterBodyMiddlewareProjectsToolTargetToArgsDelta(t *testi
 		t.Fatalf("projected target delta = %q, want %q", gotDelta, want)
 	}
 	assertChapterBodyHiddenNotice(t, got.Data)
+	if progressDelta := eventDataString(progress.Data, "delta"); progressDelta != "" {
+		t.Fatalf("content progress delta should not include body, got %q", progressDelta)
+	}
+	assertChapterBodyHiddenNotice(t, progress.Data)
+	assertGeneratedChars(t, progress.Data, len([]rune("第一行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareDropsChapterContentDeltas(t *testing.T) {
@@ -162,7 +171,7 @@ func TestSSEWriteFileChapterBodyMiddlewareDropsChapterContentDeltas(t *testing.T
 		"name":       "write_file",
 		"delta":      `{"file_path":"chapters/ch02.md","content":"第一行`,
 	}})
-	mustSuppressSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
+	progress := mustForwardSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
 		"agent_kind": agent.AgentKindIDE,
 		"id":         "call-1",
 		"name":       "write_file",
@@ -177,6 +186,12 @@ func TestSSEWriteFileChapterBodyMiddlewareDropsChapterContentDeltas(t *testing.T
 		t.Fatalf("first display delta should not include body or placeholder: %q", firstDelta)
 	}
 	assertChapterBodyHiddenNotice(t, first.Data)
+	assertGeneratedChars(t, first.Data, len([]rune("第一行")))
+	if progressDelta := eventDataString(progress.Data, "delta"); progressDelta != "" {
+		t.Fatalf("content progress delta should not include body: %q", progressDelta)
+	}
+	assertChapterBodyHiddenNotice(t, progress.Data)
+	assertGeneratedChars(t, progress.Data, len([]rune("第一行\n第二行\n第三行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareDropsDraftContentDeltas(t *testing.T) {
@@ -199,6 +214,7 @@ func TestSSEWriteFileChapterBodyMiddlewareDropsDraftContentDeltas(t *testing.T) 
 		t.Fatalf("draft display delta should include only path: %q", got)
 	}
 	assertChapterBodyHiddenNotice(t, first.Data)
+	assertGeneratedChars(t, first.Data, len([]rune("第一行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareDropsAbsoluteNovaChapterContentDeltas(t *testing.T) {
@@ -216,7 +232,7 @@ func TestSSEWriteFileChapterBodyMiddlewareDropsAbsoluteNovaChapterContentDeltas(
 		"name":       "write_file",
 		"delta":      `{"file_path":"/Users/huangyongquan/.codex/worktrees/999d/nova/.nova/测试/chapters/v00001-第一卷-废材逆袭/ch00001-第1章-陨落.md","content":"第一行`,
 	}})
-	mustSuppressSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
+	progress := mustForwardSSEEvent(t, collector, handler, agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
 		"agent_kind": agent.AgentKindIDE,
 		"id":         "call-1",
 		"name":       "write_file",
@@ -231,6 +247,12 @@ func TestSSEWriteFileChapterBodyMiddlewareDropsAbsoluteNovaChapterContentDeltas(
 		t.Fatalf("absolute Nova chapter delta should not include body or placeholder: %q", firstDelta)
 	}
 	assertChapterBodyHiddenNotice(t, first.Data)
+	assertGeneratedChars(t, first.Data, len([]rune("第一行")))
+	if progressDelta := eventDataString(progress.Data, "delta"); progressDelta != "" {
+		t.Fatalf("absolute Nova content progress delta should not include body: %q", progressDelta)
+	}
+	assertChapterBodyHiddenNotice(t, progress.Data)
+	assertGeneratedChars(t, progress.Data, len([]rune("第一行\n第二行")))
 }
 
 func TestSSEWriteFileChapterBodyMiddlewareRestoresNonChapterDeltas(t *testing.T) {
@@ -342,5 +364,13 @@ func assertChapterBodyHiddenNotice(t *testing.T, data interface{}) {
 	}
 	if got := eventDataString(data, "sse_display_notice"); got != chapterBodyHiddenNotice {
 		t.Fatalf("sse_display_notice = %q, want %q", got, chapterBodyHiddenNotice)
+	}
+}
+
+func assertGeneratedChars(t *testing.T, data interface{}, want int) {
+	t.Helper()
+	got, ok := data.(map[string]interface{})["sse_generated_chars"].(int)
+	if !ok || got != want {
+		t.Fatalf("sse_generated_chars = %#v, want %d", data.(map[string]interface{})["sse_generated_chars"], want)
 	}
 }

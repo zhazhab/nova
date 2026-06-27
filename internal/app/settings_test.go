@@ -139,6 +139,19 @@ func TestApplyLayeredSettingsToConfigAppliesAgentIdleTimeout(t *testing.T) {
 	}
 }
 
+func TestApplyLayeredSettingsToConfigAppliesLiveOutputChapterBodySetting(t *testing.T) {
+	enabled := true
+	cfg := &config.Config{}
+	applyLayeredSettingsToConfig(cfg, config.LayeredSettings{
+		Effective: config.Settings{
+			HideChapterBodyLiveOutput: &enabled,
+		},
+	})
+	if !cfg.HideChapterBodyLiveOutput {
+		t.Fatalf("HideChapterBodyLiveOutput should be applied")
+	}
+}
+
 func TestApplyLayeredSettingsToConfigClearsMaxIterationWhenUnset(t *testing.T) {
 	cfg := &config.Config{MaxIteration: 50}
 	applyLayeredSettingsToConfig(cfg, config.LayeredSettings{

@@ -21,7 +21,7 @@ interface ToolCallInfo {
 
 type StreamSegmentRole = 'assistant' | 'thinking'
 type EventMetadata = Pick<ChatMessage, 'run_id' | 'agent_name' | 'root_agent_name' | 'run_path' | 'subagent' | 'subagent_session_id' | 'subagent_type'>
-type EventDisplayMetadata = Pick<ChatMessage, 'sse_hidden_fields' | 'sse_hidden_reason' | 'sse_display_notice'>
+type EventDisplayMetadata = Pick<ChatMessage, 'sse_hidden_fields' | 'sse_hidden_reason' | 'sse_display_notice' | 'sse_generated_chars'>
 
 const STREAM_CHARS_PER_FRAME = 8
 
@@ -277,12 +277,14 @@ export function useAgentEventStream(options: AgentEventStreamOptions = {}) {
             const toolId = findToolMessageId(data, toolKeyToMessageIdRef.current, toolCallQueueRef.current, pendingToolCallsRef.current)
             if (toolId) {
               const pending = pendingToolCallsRef.current[toolId]
-              if (pending) {
-                pending.args = (pending.args || '') + delta
-              }
-              deltaBufferRef.current[toolId] = (deltaBufferRef.current[toolId] || '') + delta
-              if (deltaRafRef.current === null) {
-                deltaRafRef.current = requestAnimationFrame(flushToolArgBuffer)
+              if (delta) {
+                if (pending) {
+                  pending.args = (pending.args || '') + delta
+                }
+                deltaBufferRef.current[toolId] = (deltaBufferRef.current[toolId] || '') + delta
+                if (deltaRafRef.current === null) {
+                  deltaRafRef.current = requestAnimationFrame(flushToolArgBuffer)
+                }
               }
               if (Object.keys(displayMetadata).length > 0) {
                 setMessages(prev => prev.map(message => (
@@ -464,6 +466,8 @@ function readEventDisplayMetadata(data: Record<string, unknown>): EventDisplayMe
   if (hiddenReason) metadata.sse_hidden_reason = hiddenReason
   const displayNotice = readString(data.sse_display_notice)
   if (displayNotice) metadata.sse_display_notice = displayNotice
+  const generatedChars = readNumber(data.sse_generated_chars)
+  if (generatedChars !== undefined) metadata.sse_generated_chars = generatedChars
   return metadata
 }
 

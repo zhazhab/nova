@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- 设置：新增 `hide_novel_chapter_body_in_live_output` 配置，开启后写作模式 `write_file` 实时输出会隐藏小说章节正文，只展示写入状态、目标路径和已生成字数；默认关闭以保持原有实时输出行为。
 - Added SubAgent delegation support with configurable General SubAgent availability, custom `sub_agents`, real-time subagent stream metadata, and compact Agents page management UI.
 
 ### Changed
@@ -22,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Agent：写作模式生成小说章节时，SSE 推流前 middleware 会在 `write_file` 写入 `chapters/` 或 `drafts/` 时只向前端发送目标文件路径和隐藏提示，不再输出大量章节正文或省略号占位；前端工具卡片会提示章节正文仅在实时输出中隐藏、文件仍会正常写入。
+- Agent：写作模式生成小说章节时，开启 `hide_novel_chapter_body_in_live_output` 后，SSE 推流前 middleware 会在 `write_file` 写入 `chapters/` 或 `drafts/` 时只向前端发送目标文件路径、隐藏提示和已生成字数，不再输出大量章节正文或省略号占位；前端工具卡片会提示章节正文仅在实时输出中隐藏、文件仍会正常写入。
 - WebUI：允许 pnpm 在安装时执行 `msw` 的构建脚本，避免高版本 pnpm 首次安装后因 `ERR_PNPM_IGNORED_BUILDS` 导致前端启动失败。
 - Agent：修复自定义 SubAgent 在互动故事父 Agent 下可能绕过写文件拦截的问题，并让配置管理 SubAgent 的专属读写工具遵守自身工具权限限制。
 - WebUI：修复浅色主题下 SubAgent 删除确认弹窗危险按钮对比度不足的问题，并将基础弹窗宽度改为随视口自适应，避免自定义 SubAgent 编辑等弹窗过窄。

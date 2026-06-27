@@ -330,6 +330,7 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
   const taskSubAgent = isDelegationTool ? (message.subagent_type || parseTaskSubagentType(rawArgs)) : ''
   const isChapterBodyHidden = message.sse_display_notice === 'chapter_body_hidden'
   const chapterBodyHiddenPath = isChapterBodyHidden ? extractToolArgPath(rawArgs) : ''
+  const chapterGeneratedChars = isChapterBodyHidden && typeof message.sse_generated_chars === 'number' ? message.sse_generated_chars : undefined
   const displayName = isDelegationTool ? t('chat.subagent.taskLabel') : name
   const detailArgs = isDelegationTool ? formatTaskDelegationArgs(rawArgs) : (isChapterBodyHidden ? '' : args)
   const hasResult = status === 'success'
@@ -340,7 +341,9 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
     : buildToolArgSummary(args) || (isStreamingContent ? t('chat.tool.writing') : t('chat.tool.preparing'))
   const resultPreview = buildPreview(result, 80)
   const displaySummary = isChapterBodyHidden
-    ? (hasResult ? t('chat.tool.chapterWritten') : t('chat.tool.chapterWriting'))
+    ? chapterGeneratedChars !== undefined
+      ? t(hasResult ? 'chat.tool.chapterWrittenWithCount' : 'chat.tool.chapterWritingWithCount', { count: chapterGeneratedChars })
+      : (hasResult ? t('chat.tool.chapterWritten') : t('chat.tool.chapterWriting'))
     : (hasResult ? resultPreview || t('chat.tool.done') : summary)
   const hasDetail = Boolean(detailArgs || result || isChapterBodyHidden)
 
@@ -386,6 +389,11 @@ export function ToolExecutionBlock({ message }: { message: ChatMessage }) {
                   <div className="min-w-0">
                     <span className="text-[var(--nova-text-faint)]">{t('chat.tool.chapterPath')}</span>
                     <code className="ml-1 break-all font-mono text-[var(--nova-text-muted)]">{chapterBodyHiddenPath}</code>
+                  </div>
+                )}
+                {chapterGeneratedChars !== undefined && (
+                  <div className="text-[var(--nova-text-faint)]">
+                    {t('chat.tool.chapterGeneratedChars', { count: chapterGeneratedChars })}
                   </div>
                 )}
                 <div className="text-[var(--nova-text-faint)]">{t('chat.tool.chapterBodyHidden')}</div>

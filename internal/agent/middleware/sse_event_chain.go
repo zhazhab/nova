@@ -7,15 +7,29 @@ type SSEEventMiddlewareChain struct {
 	middlewares []SSEEventMiddleware
 }
 
-// NewSSEEventMiddlewareChain creates the default outbound SSE middleware chain.
-func NewSSEEventMiddlewareChain() *SSEEventMiddlewareChain {
-	return newSSEEventMiddlewareChainWithMiddlewares(
-		newWriteFileChapterBodySSEMiddleware(),
-	)
+// NewSSEEventMiddlewareChain creates the outbound SSE middleware chain for one
+// client stream. Optional presentation filters are enabled through options.
+func NewSSEEventMiddlewareChain(options ...SSEEventMiddlewareChainOptions) *SSEEventMiddlewareChain {
+	opts := mergeSSEEventMiddlewareChainOptions(options...)
+	middlewares := make([]SSEEventMiddleware, 0, 1)
+	if opts.HideChapterBodyLiveOutput {
+		middlewares = append(middlewares, newWriteFileChapterBodySSEMiddleware())
+	}
+	return newSSEEventMiddlewareChainWithMiddlewares(middlewares...)
 }
 
 func newSSEEventMiddlewareChainWithMiddlewares(middlewares ...SSEEventMiddleware) *SSEEventMiddlewareChain {
 	return &SSEEventMiddlewareChain{middlewares: append([]SSEEventMiddleware(nil), middlewares...)}
+}
+
+func mergeSSEEventMiddlewareChainOptions(options ...SSEEventMiddlewareChainOptions) SSEEventMiddlewareChainOptions {
+	var out SSEEventMiddlewareChainOptions
+	for _, option := range options {
+		if option.HideChapterBodyLiveOutput {
+			out.HideChapterBodyLiveOutput = true
+		}
+	}
+	return out
 }
 
 // Next returns a handler that runs middleware before the final SSE writer.

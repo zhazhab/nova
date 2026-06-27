@@ -13,12 +13,17 @@ import (
 	novaApp "nova/internal/app"
 )
 
+type StreamOptions struct {
+	HideChapterBodyLiveOutput bool
+}
+
 // StreamTask writes a Task event snapshot and live updates as Server-Sent Events.
-func StreamTask(c *app.RequestContext, task *novaApp.Task) {
+func StreamTask(c *app.RequestContext, task *novaApp.Task, options ...StreamOptions) {
 	c.Response.Header.Set("Content-Type", "text/event-stream")
 	c.Response.Header.Set("Cache-Control", "no-cache")
 	c.Response.Header.Set("Connection", "keep-alive")
 	c.Response.ImmediateHeaderFlush = true
+	opts := mergeStreamOptions(options...)
 
 	pr, pw := io.Pipe()
 
@@ -36,7 +41,7 @@ func StreamTask(c *app.RequestContext, task *novaApp.Task) {
 		var snapshot []agent.Event
 		snapshot, ch = task.Subscribe()
 		log.Printf("[agent-sse] stream start task_id=%s replay=%d", task.ID(), len(snapshot))
-		writeSSE := newSSEWriteHandler(pw)
+		writeSSE := newSSEWriteHandler(pw, opts)
 
 		for _, ev := range snapshot {
 			if err := writeSSE(ev); err != nil {
@@ -57,11 +62,24 @@ func StreamTask(c *app.RequestContext, task *novaApp.Task) {
 	c.Response.SetBodyStream(pr, -1)
 }
 
-func newSSEWriteHandler(w io.Writer) agentmiddleware.SSEEventHandler {
-	chain := agentmiddleware.NewSSEEventMiddlewareChain()
+func newSSEWriteHandler(w io.Writer, options ...StreamOptions) agentmiddleware.SSEEventHandler {
+	opts := mergeStreamOptions(options...)
+	chain := agentmiddleware.NewSSEEventMiddlewareChain(agentmiddleware.SSEEventMiddlewareChainOptions{
+		HideChapterBodyLiveOutput: opts.HideChapterBodyLiveOutput,
+	})
 	return chain.Next(func(ev agent.Event) error {
 		return writeEvent(w, ev.Type, ev.Data)
 	})
+}
+
+func mergeStreamOptions(options ...StreamOptions) StreamOptions {
+	var out StreamOptions
+	for _, option := range options {
+		if option.HideChapterBodyLiveOutput {
+			out.HideChapterBodyLiveOutput = true
+		}
+	}
+	return out
 }
 
 func writeEvent(w io.Writer, eventType string, data interface{}) error {

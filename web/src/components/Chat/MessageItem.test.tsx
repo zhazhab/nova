@@ -147,16 +147,18 @@ describe('MessageItem', () => {
           sse_hidden_fields: ['content'],
           sse_hidden_reason: 'novel_chapter_body',
           sse_display_notice: 'chapter_body_hidden',
+          sse_generated_chars: 123,
         }}
       />,
     )
 
-    expect(screen.getByText('正在写入章节')).toBeInTheDocument()
+    expect(screen.getByText('正在写入章节 · 已生成 123 字')).toBeInTheDocument()
     expect(screen.queryByText('准备执行工具请求')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '详情' }))
     expect(screen.getByText('路径：')).toBeInTheDocument()
     expect(screen.getByText(path)).toBeInTheDocument()
+    expect(screen.getByText('已生成：123 字')).toBeInTheDocument()
     expect(screen.getByText('章节正文已在实时输出中隐藏，文件仍会正常写入。')).toBeInTheDocument()
     expect(screen.queryByText(/content/)).not.toBeInTheDocument()
   })

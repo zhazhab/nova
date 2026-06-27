@@ -53,6 +53,26 @@ func TestSSEEventMiddlewareChainStopsWhenMiddlewareDoesNotCallNext(t *testing.T)
 	}
 }
 
+func TestSSEEventMiddlewareChainDoesNotFilterChapterBodyByDefault(t *testing.T) {
+	collector := &sseEventCollector{}
+	handler := NewSSEEventMiddlewareChain().Next(collector.Handle)
+
+	if err := handler(agent.Event{Type: "tool_args_delta", Data: map[string]interface{}{
+		"agent_kind": agent.AgentKindIDE,
+		"id":         "call-1",
+		"name":       "write_file",
+		"delta":      `{"file_path":"chapters/ch02.md","content":"正文"}`,
+	}}); err != nil {
+		t.Fatalf("handler failed: %v", err)
+	}
+	if len(collector.events) != 1 {
+		t.Fatalf("forwarded events = %d, want 1", len(collector.events))
+	}
+	if got := eventDataString(collector.events[0].Data, "delta"); !strings.Contains(got, "正文") {
+		t.Fatalf("default chain should preserve body delta, got %q", got)
+	}
+}
+
 type sseRecordingMiddleware struct {
 	name     string
 	calls    *[]string

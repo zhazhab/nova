@@ -571,6 +571,9 @@ func applyLayeredSettingsToConfig(cfg *config.Config, layered config.LayeredSett
 	if effective.DraftFlowEnabled != nil {
 		cfg.DraftFlowEnabled = *effective.DraftFlowEnabled
 	}
+	if effective.HideChapterBodyLiveOutput != nil {
+		cfg.HideChapterBodyLiveOutput = *effective.HideChapterBodyLiveOutput
+	}
 	if effective.ChapterGroupMin != nil {
 		cfg.ChapterGroupMin = appSettingsInt(effective.ChapterGroupMin, 3)
 	}
@@ -649,6 +652,9 @@ func applySettingsLayerToConfig(cfg *config.Config, settings config.Settings) {
 	}
 	if settings.DraftFlowEnabled != nil {
 		cfg.DraftFlowEnabled = *settings.DraftFlowEnabled
+	}
+	if settings.HideChapterBodyLiveOutput != nil {
+		cfg.HideChapterBodyLiveOutput = *settings.HideChapterBodyLiveOutput
 	}
 	if settings.ChapterGroupMin != nil {
 		cfg.ChapterGroupMin = appSettingsInt(settings.ChapterGroupMin, 3)
