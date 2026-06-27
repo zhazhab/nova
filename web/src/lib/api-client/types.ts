@@ -28,6 +28,9 @@ export interface ChatMessage {
   subagent?: boolean
   subagent_session_id?: string
   subagent_type?: string
+  sse_hidden_fields?: string[]
+  sse_hidden_reason?: string
+  sse_display_notice?: string
   prompt_tokens?: number
   cached_prompt_tokens?: number
   uncached_prompt_tokens?: number

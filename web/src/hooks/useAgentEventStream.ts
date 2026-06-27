@@ -21,6 +21,7 @@ interface ToolCallInfo {
 
 type StreamSegmentRole = 'assistant' | 'thinking'
 type EventMetadata = Pick<ChatMessage, 'run_id' | 'agent_name' | 'root_agent_name' | 'run_path' | 'subagent' | 'subagent_session_id' | 'subagent_type'>
+type EventDisplayMetadata = Pick<ChatMessage, 'sse_hidden_fields' | 'sse_hidden_reason' | 'sse_display_notice'>
 
 const STREAM_CHARS_PER_FRAME = 8
 
@@ -236,6 +237,7 @@ export function useAgentEventStream(options: AgentEventStreamOptions = {}) {
               args,
               status: 'running',
               ...metadata,
+              ...readEventDisplayMetadata(data),
               subagent_type: toolName === 'task' ? parseTaskSubagentType(args) : metadata.subagent_type,
             }))
             break
@@ -271,6 +273,7 @@ export function useAgentEventStream(options: AgentEventStreamOptions = {}) {
           }
           case 'tool_args_delta': {
             const delta = readString(data.delta)
+            const displayMetadata = readEventDisplayMetadata(data)
             const toolId = findToolMessageId(data, toolKeyToMessageIdRef.current, toolCallQueueRef.current, pendingToolCallsRef.current)
             if (toolId) {
               const pending = pendingToolCallsRef.current[toolId]
@@ -280,6 +283,13 @@ export function useAgentEventStream(options: AgentEventStreamOptions = {}) {
               deltaBufferRef.current[toolId] = (deltaBufferRef.current[toolId] || '') + delta
               if (deltaRafRef.current === null) {
                 deltaRafRef.current = requestAnimationFrame(flushToolArgBuffer)
+              }
+              if (Object.keys(displayMetadata).length > 0) {
+                setMessages(prev => prev.map(message => (
+                  message.role === 'tool_call' && message.id === toolId
+                    ? { ...message, ...displayMetadata }
+                    : message
+                )))
               }
             }
             break
@@ -443,6 +453,17 @@ function readEventMetadata(data: Record<string, unknown>): EventMetadata {
   }
   const subagentType = readString(data.subagent_type) || parseTaskSubagentType(readString(data.args))
   if (subagentType) metadata.subagent_type = subagentType
+  return metadata
+}
+
+function readEventDisplayMetadata(data: Record<string, unknown>): EventDisplayMetadata {
+  const hiddenFields = readStringArray(data.sse_hidden_fields)
+  const metadata: EventDisplayMetadata = {}
+  if (hiddenFields.length > 0) metadata.sse_hidden_fields = hiddenFields
+  const hiddenReason = readString(data.sse_hidden_reason)
+  if (hiddenReason) metadata.sse_hidden_reason = hiddenReason
+  const displayNotice = readString(data.sse_display_notice)
+  if (displayNotice) metadata.sse_display_notice = displayNotice
   return metadata
 }
 
