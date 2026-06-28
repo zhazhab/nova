@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- 设置：新增 `hide_novel_chapter_body_in_live_output` 配置，开启后隐藏章节正文在 Agent 流中的输出，并保留目标路径和已生成字符数；默认关闭以保持原有实时输出行为。
+
+### Fixed
+
+- Agent：写作模式生成小说章节时，开启 `hide_novel_chapter_body_in_live_output` 后，SSE 推流前 middleware 会在 `write_file` 写入 `chapters/` 或 `drafts/` 时只向前端发送目标文件路径、隐藏提示和已生成字符数，不再输出大量章节正文或省略号占位；字符进度会按增量轻量节流，并在工具结束前用完整参数解码校准最终值，口径与 `wc -m` 保持一致，前端工具卡片会提示章节正文仅在 Agent 流中隐藏、文件仍会正常写入。
+
 ## [v0.1.17] - 2026-06-27
 
 ### Added
@@ -108,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Agent：写作模式生成小说章节时，开启 `hide_novel_chapter_body_in_live_output` 后，SSE 推流前 middleware 会在 `write_file` 写入 `chapters/` 或 `drafts/` 时只向前端发送目标文件路径、隐藏提示和已生成字符数，不再输出大量章节正文或省略号占位；字符进度会按增量轻量节流，并在工具结束前用完整参数解码校准最终值，口径与 `wc -m` 保持一致，前端工具卡片会提示章节正文仅在实时输出中隐藏、文件仍会正常写入。
 - WebUI：允许 pnpm 在安装时执行 `msw` 的构建脚本，避免高版本 pnpm 首次安装后因 `ERR_PNPM_IGNORED_BUILDS` 导致前端启动失败。
 - WebUI：修复 Agent 对话、SubAgent 详情栏和工具流式预览在输出增长时不会稳定锁定到底部的问题；现在默认跟随到底部，用户主动上滑后停止自动滚动，重新滚到底部后再恢复跟随。
 - WebUI：修复创作 Agent 输入动作菜单里的写作 Skill 列表需要鼠标悬停后才开始加载、首次展开慢一拍的问题；现在创作 Agent 面板打开时就会预加载写作 Skill 列表和默认选择。
